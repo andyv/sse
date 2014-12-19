@@ -1,0 +1,11 @@
+
+
+This is the SSE-C compiler.  A C-like language with features for
+parallel computation with SIMD registers.  This is language is not
+meant for writing full programs, it is meant for writing inner
+subroutines for high-performance computing programs.
+
+This program is written in pure python to make development fast.
+Modern machines are so fast that compile speed hopefully won't be a
+problem.
+

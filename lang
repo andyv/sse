@@ -1,0 +1,94 @@
+
+
+Simple mini-language for writing SSE subroutines
+
+C-like, maps fairly directly to SSE instructions.
+
+Some way to set and query status bits
+
+
+
+
+SSE Opcodes
+---------------
+
+Addition
+Subtraction
+Multiplication
+Division
+Reciprocal
+Square root
+Reciprocal square root
+
+Absolute value
+
+Logical integer operations   |  &  ~ 
+
+
+Minimum
+Maximum
+Average
+
+Comparison sets integer values, flags for lowest word
+Data conversion intrinsics
+Shuffling
+
+Horizontal addition?
+
+Multiply accumulate    a += b*c  ?
+
+
+
+-------------------------
+
+
+Types:
+
+xmm register          int8_16  int16_8  int32_4   float4   double2
+
+cpu register          int8 int16 int32 int64   uint8 uint16 uint32 uint64
+
+xmm register low      float double
+
+
+Vector assignment:
+
+  float4 a, b, c;
+  float x, y, z;
+
+  a = ( 1.0, 2.0, 3.0, 4.0 );
+  a = ( a.3, a.2, a.1, a.0 );     # Shuffle
+  a = ( a.0, a.0, a.0, a.0 );     # Broadcast via shuffle
+  a = ( a.2, a.2, a.2, 1.0 );     # Requires store to mem and load
+
+  a = b + c;
+  a = 3*(b*b + c);
+
+  x, y, z, . = a;
+  x, y, z, . = a + 3.2;     # Constant broadcast to temp
+
+  a = sqrt(a);
+
+  a = 1.0 / a;        # Reciprocal, special case
+  a = z / sqrt(a);    # Multiplication by reciprocal square root
+
+  a = abs(a);
+
+  c = a < b;    # Vector compare, c must be an integer vector
+
+
+
+
+Statements:
+
+    for  while   return?   switch 
+
+    if () else
+
+Arrays, pointers?
+
+Start with expressions, no control structures
+
+
+
+
