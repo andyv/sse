@@ -28,6 +28,7 @@
 ##### Parser
 
 from kw import *
+from ir_nodes import *
 
 import lexer
 import sys
@@ -35,6 +36,12 @@ import sys
 
 class parse_error(Exception):
     pass
+
+
+
+def get_temp_label(index=[0]):
+    index[0] += 1
+    return label('L.%d' % index[0])
 
 
 
@@ -101,46 +108,6 @@ class procedure:
     pass
 
 
-class jump:
-    def __init__(self, label, cond=None):
-        self.label = label
-        self.cond = cond
-
-        label.jumps.append(self)
-        return
-
-
-    def show(self):
-        print 'jump %s' % self.label.name,
-
-        if self.cond is not None:
-            print '  cond=',
-            self.cond.show()
-            pass
-
-        return
-
-    pass
-
-
-class label:
-    def __init__(self, name):
-        self.name = name
-        self.defined = False
-        self.jumps = []
-        return
-
-
-    def show(self):
-        print '%s (%d):' % (self.name, len(self.jumps)),
-        return
-
-    pass
-
-
-def get_temp_label(index=[0]):
-    index[0] += 1
-    return label('L.%d' % index[0])
 
 
 # Blocks contain variable declarations and statements.  The namespace
@@ -220,494 +187,31 @@ class block:
 
 
 # flatten0()-- Top level flattening.  The recursive version returns a
-# list.  We take the list, link things together through a 'next'
-# member and return the entry node.
+# list.  We take the list, create the doubly linked list of ir_nodes.
+# We return None if there are no nodes, or the first node otherwise.
 
     def flatten0(self):
         result = self.flatten()
+        head = tail = None
 
-        prev = None
         for st in result:
-            if prev is not None:
-                prev.next = st
+            if head is None:
+                head = tail = st
+                st.next = st.prev = None
+
+            else:
+                tail.insert_next(st)
+                tail = st
                 pass
 
             pass
 
         st.next = None
-        return result[0]
+        return head
 
     pass
 
 
-
-class expr:
-    pass
-
-
-
-class expr_assign(expr):
-    def __init__(self, *args):
-        self.var, self.value = args
-        return
-
-
-    def show(self):
-        self.var.show()
-        sys.stdout.write(' = ')
-        self.value.show()
-        return
-
-
-    def simplify(self):
-        self.var = self.var.simplify()
-        self.value = self.value.simplify()
-        return self
-
-    pass
-
-
-
-class expr_ternary(expr):
-    def __init__(self, *args):
-        self.predicate, self.a, self.b = args
-        return
-
-    def show(self):
-        self.predicate.show()
-        sys.stdout.write(' ? ')
-        self.a.show()
-        sys.stdout.write(' : ')
-        self.b.show()
-        return
-
-    def simplify(self):
-        if not isinstance(self.predicate, constant):
-            return self
-
-        self.a.simplify()
-        self.b.simplify()
-        return self.a if self.predicate.value else self.b
-
-    pass
-
-
-
-#########################
-
-class expr_binary(expr):
-    def __init__(self, *args):
-        self.a, self.b = args
-        return
-
-
-    def show(self):
-        self.a.show()
-        sys.stdout.write(self.op)
-        self.b.show()
-        return
-
-    pass
-
-
-
-class expr_mult(expr_binary):
-    op = '*'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant):
-            if self.a.value == 0:
-                return constant(0)
-
-            if self.a.value == 1:
-                return self.b
-
-            if self.a.value == -1:
-                return expr_uminus(self.b).simplify()
-
-            pass
-
-        if isinstance(self.b, constant):
-            if self.b.value == 0:
-                return constant(0)
-
-            if self.b.value == 1:
-                return self.a
-
-            if self.b.value == -1:
-                return expr_uminus(self.a).simplify()
-
-            pass
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value + self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_quotient(expr_binary):
-    op = '/'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant):
-            if self.a.value == 0:
-                return constant(0)
-
-            pass
-
-        if isinstance(self.b, constant):
-            if self.b.value == 1:
-                return self.a
-
-            if self.b.value == -1:
-                return expr_uminus(self.a).simplify()
-
-            pass
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value / self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_modulus(expr_binary):
-    op = '%'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value % self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_plus(expr_binary):
-    op = '+'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and self.a.value == 0:
-            return self.b
-
-        if isinstance(self.b, constant) and self.b.value == 0:
-            return self.a
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value + self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_minus(expr_binary):
-    op = '-'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and self.a.value == 0:
-            return expr_uminus(self.b).simplify()
-
-        if isinstance(self.b, constant) and self.b.value == 0:
-            return self.a
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value - self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_lshift(expr_binary):
-    op = '<<'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value << self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_rshift(expr_binary):
-    op = '>>'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value >> self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_bitwise_and(expr_binary):
-    op = '&'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value & self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_bitwise_xor(expr_binary):
-    op = '^'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value ^ self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_bitwise_or(expr_binary):
-    op = '|'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value | self.b.value)
-
-        return self
-
-    pass
-
-
-class expr_logical_and(expr_binary):
-    op = '&&'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and self.a.value != 0:
-            return self.b
-
-        return self
-
-    pass
-
-
-class expr_logical_or(expr_binary):
-    op = '||'
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant):
-            return self.b if self.a.value == 0 else constant(1)
-
-        return self
-
-    pass
-
-
-class expr_compare(expr_binary):
-
-    def simplify(self):
-        self.a = self.a.simplify()
-        self.b = self.b.simplify()
-
-        if isinstance(self.a, constant) and isinstance(self.b, constant):
-            a = self.value.a
-            b = self.value.b
-
-            if self.op == '==':
-                rc = 1 if a == b else 0
-
-            elif self.op == '<':
-                rc = 1 if a < b else 0
-
-            elif self.op == '<=':
-                rc = 1 if a <= b else 0
-
-            elif self.op == '>':
-                rc = 1 if a > b else 0
-
-            elif self.op == '<=':
-                rc = 1 if a >= b else 0
-
-            else:
-                raise SystemExit, 'expr_compare.simplify(): Bad operator'
-
-            return constant(rc)
-
-        return self
-
-    pass
-
-
-
-class expr_equal(expr_compare):
-    op = '=='
-    pass
-
-class expr_not_equal(expr_compare):
-    op = '!='
-    pass
-
-class expr_less(expr_compare):
-    op = '<'
-    pass
-
-class expr_less_equal(expr_compare):
-    op = '<='
-    pass
-
-class expr_greater(expr_compare):
-    op = '>'
-    pass
-
-class expr_greater_equal(expr_compare):
-    op = '>='
-    pass
-
-
-opposite_cond = {
-    expr_equal:          expr_not_equal,
-    expr_not_equal:      expr_equal,
-    expr_less:           expr_greater_equal,
-    expr_less_equal:     expr_greater,
-    expr_greater:        expr_less_equal,
-    expr_greater_equal:  expr_less,
-}
-
-
-
-################
-
-class expr_unary(expr):
-    def __init__(self, arg):
-        self.arg = arg
-        return
-
-    def show(self):
-        sys.stdout.write(self.op)
-        self.arg.show()
-        return
-
-    pass
-
-
-class expr_uplus(expr_unary):
-    op = '+'
-
-    def simplify(self):
-        self.arg.simplify()
-        return self.arg
-
-    pass
-
-
-class expr_uminus(expr_unary):
-    op = '-'
-
-    def simplify(self):
-        self.arg = self.arg.simplify()
-
-        if isinstance(self.arg, expr_uminus):
-            return self.arg.arg
-
-        if not isinstance(self.arg, constant):
-            return self
-
-        self.arg.value *= -1
-        return self.arg
-
-    pass
-
-
-class expr_load(expr_unary):
-    op = '*'
-
-    def simplify(self):
-        self.arg = self.arg.simplify()
-        return self
-
-    pass
-
-
-class expr_logical_not(expr_unary):
-    op = '!'
-
-    def simplify(self):
-        self.arg = a = self.arg.simplify()
-
-        if isinstance(a, expr_compare):
-            return opposite_cond[a.__class__](a.a, a.b)
-
-        return self
-
-    pass
-
-
-class expr_paren(expr_unary):
-
-    def show(self):
-        sys.stdout.write('(')
-        self.arg.show()
-        sys.stdout.write(')')
-        return
-
-
-    def simplify(self):
-        return self.arg.simplify()
-
-    pass
-
-
-class expr_intrinsic(expr):
-    def __init__(self, *args):
-        self.name, self.arg = args
-        return
-
-    def show(self):
-        sys.stdout.write(self.name + '(')
-        self.arg.show()
-        sys.stdout.write(')')
-        return
-
-    pass
 
 
 # invert_condition()-- Invert the condition, simplifying.
@@ -1581,11 +1085,12 @@ class parser:
 
 
 
-def show_proclist(st_list):
-    for st in st_list:
+def show_proclist(st):
+    while st is not None:
         sys.stdout.write(5*' ')
         st.show()
         print
+        st = st.next
         pass
 
     return
@@ -1595,105 +1100,140 @@ def show_proclist(st_list):
 # label_optimize()-- Label-related optimizations, mostly just to get
 # them out of the way.
 
-def label_optimize(seq):
+def label_optimize(st):
+    temp = ir_node()       # Can't be removed
+    st.insert_prev(temp)
 
-    i = 0
-    while i < len(seq):
-        if not isinstance(seq[i], label):
-            i = i + 1
+    while st is not None:
+        next_st = st.next
+
+        if not isinstance(st, label):
+            st = next_st
             continue
 
-        if len(seq[i].jumps) == 0:  # Remove never used labels
-            del seq[i]
+        if len(st.jumps) == 0:  # Remove never used labels
+            st.remove()
+            st = next_st
             continue
 
-        if (i >= len(seq) - 1) or (not isinstance(seq[i+1], label)):
-            i = i + 1
+        if not isinstance(next_st, label):
+            st = next_st
             continue
 
-# Replace two adjacent labels with a single label.
-            
-        for j in seq[i+1].jumps:
-            j.label = seq[i]
+# Replace two adjacent labels with a single label.  st stays the same
+# thing so that we can collapse multiple labels.
+
+        for j in next_st.jumps:
+            j.label = st
+            st.jumps.append(j)
             pass
 
-        del seq[i+1]
+        next_st.remove()
         pass
 
-    return
+    temp.remove()
+    return temp.next
 
 
 # jump_optimize()-- Optimize jumps in a code block.
 
-def jump_optimize(seq):
+def jump_optimize(st):
+    temp = ir_node()
+    st.insert_prev(temp)
 
-    i = 0
-    while i < len(seq)-2:
-        j1 = seq[i]           # Optimize jumps around other jumps
-        j2 = seq[i+1]
-        lbl = seq[i+2]
+# Optimize jumps around other jumps
 
-        if isinstance(j1, jump) and (j1.cond is not None) and \
-           isinstance(j2, jump) and (j2.cond is None) and \
-           isinstance(lbl, label) and (j1.label is lbl):
+    j1 = st
 
-            lbl.jumps.remove(j1)
-            if len(lbl.jumps) == 0:
-                del seq[i+2]
-                pass
+    while j1 is not None:
+        next_st = j1.next
 
-            j1.label = j2.label
-            j1.cond = invert_condition(j1.cond)
-
-            j2.label.jumps.remove(j2)
-            j2.label.jumps.append(j1)
-
-            del seq[i+1]
+        if not isinstance(j1, jump):
+            j1 = next_st
             continue
 
-        if isinstance(j1, jump):   # Optimize jumps to unconditional jumps
-            n = seq.index(j1.label) + 1
-            if n < len(seq):
-                j3 = seq[n]
-                if isinstance(j3, jump) and j3.cond is None:
-                    j1.label.jumps.remove(j1)
+        j2 = j1.next
+        if j2 is None or (not isinstance(j2, jump)):
+            j1 = next_st
+            continue
 
-                    j1.label = j3.label
-                    j1.label.jumps.append(j1)
-                    pass
-                    
-                pass
+        lbl = j2.next
 
-        i = i + 1
+        if lbl is None or (not isinstance(lbl, label)) or j1.label is not lbl:
+            j1 = next_st
+            continue
+
+        lbl.jumps.remove(j1)
+        if len(lbl.jumps) == 0:
+            lbl.remove()
+            pass
+
+        j1.label = j2.label
+        j1.cond = invert_condition(j1.cond)
+
+        j2.label.jumps.remove(j2)
+        j2.label.jumps.append(j1)
+
+        j2.remove()
         pass
 
-    return
+
+# Optimize jumps to unconditional jumps
+
+    j1 = temp.next
+
+    while j1 is not None:
+        if not isinstance(j1, jump):
+            j1 = j1.next
+            continue
+
+        j2 = j1.label.next
+
+        if isinstance(j2, jump) and j2.cond is None:
+            j1.label.jumps.remove(j1)
+
+            j1.label = j2.label
+            j1.label.jumps.append(j1)
+            pass
+
+        j1 = j1.next
+        pass
+
+    temp.remove()
+    return temp.next
 
 
 # remove_dead_code()-- Remove statements following unconditional
 # jumps, until the next label.
 
-def remove_dead_code(seq):
+def remove_dead_code(st):
+    temp = ir_node()
+    st.insert_prev(temp)
 
-    i = 0
-    while i < len(seq):
-        jmp = seq[i]
 
-        if (not isinstance(jmp, jump)) or (jmp.cond is not None):
-            i = i + 1
+    while st is not None:
+        next_st = st.next
+
+        if (not isinstance(st, jump)) or (st.cond is not None):
+            st = next_st
             continue
 
-        i = i + 1
-        while i < len(seq):
-            if isinstance(seq[i], label):
+        st = next_st
+
+        while st is not None:
+            next_st = st.next
+            if isinstance(st, label):
                 break
 
-            del seq[i]
+            st.remove()
+            st = next_st
             pass
 
+        st = next_st
         pass
 
-    return
+    temp.remove()
+    return temp.next
 
 
 
@@ -1712,14 +1252,14 @@ for v in p.global_namespace.values():
 
     print 'Procedure'
 
-    seq = v.block.flatten0()
+    st = v.block.flatten0()
+    st = label_optimize(st)
+    st = jump_optimize(st)
+    st = label_optimize(st)
+    st = remove_dead_code(st)
 
-    label_optimize(seq)
-    jump_optimize(seq)
-    label_optimize(seq)
-    remove_dead_code(seq)
+    show_proclist(st)
 
-    show_proclist(seq)
     print
     pass
 
