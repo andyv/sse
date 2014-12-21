@@ -41,8 +41,9 @@ class token:
 
 
 class constant:
-    def __init__(self, value):
+    def __init__(self, value, decl_type):
         self.value = value
+        self.type = decl_type
         return
 
     def __str__(self):
@@ -98,6 +99,15 @@ class type_node:
         self.basic_type = basic_type
         self.level = level
         return
+
+
+    def __cmp__(self, other):
+        assert(isinstance(other, type_node))
+
+        if self.basic_type is other.basic_type:
+            return 0
+
+        return 1
 
     pass
 

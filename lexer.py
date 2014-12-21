@@ -169,15 +169,11 @@ class lexer:
         m = float_re.match(self.current_line)
         if m is not None:
             self.current_line = self.current_line[len(m.group()):]
-            c = constant(float(m.group()))
-            c.type = type_node(type_float4, 0)
-            return c
+            return constant(float(m.group()), type_node(type_float4, 0))
 
         value = int_re.match(self.current_line).group()
         self.current_line = self.current_line[len(value):]
-        c = constant(int(value))
-        c.type = type_node(type_int4, 0)
-        return c
+        return constant(int(value), type_node(type_int4, 0))
 
 
     def parse_unigram(self):

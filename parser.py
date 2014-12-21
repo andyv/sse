@@ -41,10 +41,12 @@ def get_temp_label(index=[0]):
     return label('L.%d' % index[0])
 
 
-
 class variable:
     def __init__(self, name, var_type, initial=None,
                  q_static=None, q_extern=None):
+
+        assert(isinstance(var_type, type_node))
+
         self.name = name
         self.type = var_type
 
@@ -52,7 +54,7 @@ class variable:
         self.q_extern = q_extern
         self.initial = initial
 
-        if var_type == type_void:
+        if var_type.basic_type is type_void:
             raise parse_error, 'Variable cannot have a void type'
 
         return
@@ -75,13 +77,19 @@ class variable:
     pass
 
 
+def get_temp_var(var_type, index=[0]):
+    index[0] += 1
+    return variable('T.%d' % index[0], var_type)
+
+
+
 class procedure:
     def __init__(self, name, decl_type):
         self.name = name
         self.type = decl_type
 
-        self.return_var = None if decl_type is type_void else \
-                             variable('.retval', decl_type)
+        self.return_var = None if decl_type == type_node(type_void, 0) else \
+                            variable('.retval', decl_type)
 
         self.done_label = get_temp_label()
         return
@@ -520,7 +528,8 @@ class parser:
 
 ### Statement parsers
 
-    def parse_type_decl(self, decl_type, q_static=False):
+    def parse_type_decl(self, name, q_static=False):
+        decl_type = type_node(name, 0)
 
         while True:
             n = self.lexer.next_token()
@@ -1209,7 +1218,6 @@ def remove_dead_code(st):
     temp = ir_node()
     st.insert_prev(temp)
 
-
     while st is not None:
         next_st = st.next
 
@@ -1235,6 +1243,98 @@ def remove_dead_code(st):
     return temp.next
 
 
+# ssa_expr0()-- Recursive function for expanding an expression node
+# into ssa form.  The new assignment statements are inserted prior to
+# the st statement.  This is a depth-first traversal.
+
+def ssa_expr0(e, st):
+
+    if isinstance(e, ( constant, variable )):
+        pass
+
+    elif isinstance(e, ( expr_binary, expr_compare )):
+        ssa_expr0(e.a, st)
+        ssa_expr0(e.b, st)
+
+        if not isinstance(e.a, ( constant, variable )):
+            t = get_temp_var(e.a.type)
+            st.insert_prev(expr_assign(t, e.a))
+            e.a = t
+            pass
+
+        if not isinstance(e.b, ( constant, variable )):
+            t = get_temp_var(e.b.type)
+            st.insert_prev(expr_assign(t, e.b))
+            e.b = t
+            pass
+
+        pass
+
+    elif isinstance(e, expr_assign):
+        ssa_expr0(e.value, st)
+
+    elif isinstance(e, expr_ternary):
+        e.predicate = ssa_expr0(e.predicate, st)
+        e.a = ssa_expr0(e.a, st)
+        e.b = ssa_expr0(e.b, st)
+
+    elif isinstance(e, ( expr_unary, expr_intrinsic )):
+        ssa_expr0(e.arg, st)
+
+        if not isinstance(e.arg, ( constant, variable )):
+            t = get_temp_var(e.arg.type)
+            st.insert_prev(expr_assign(t, e.arg))
+            e.arg = t
+            pass
+
+        pass
+
+    else:
+        raise RuntimeError, 'ssa_expr0 Unknown expr type: ' + str(type(e))
+
+    return
+
+
+# ssa_expr()-- Expand expression nodes into SSA form.
+
+def ssa_expr(st):
+    temp = ir_node()
+    st.insert_prev(temp)
+
+    while st is not None:
+        if isinstance(st, expr):
+            ssa_expr0(st, st)
+
+        elif isinstance(st, jump) and st.cond is not None:
+            ssa_expr0(st.cond, st)
+            pass
+
+        st = st.next
+        pass
+
+    temp.remove()
+    return temp.next
+
+
+
+
+def codegen(proc):
+    print 'Procedure'
+
+    st = v.block.flatten0()
+
+    st = label_optimize(st)
+    st = jump_optimize(st)
+    st = label_optimize(st)
+    st = remove_dead_code(st)
+
+    st = ssa_expr(st)
+
+    show_proclist(st)
+
+    print
+    return
+
 
 
 
@@ -1246,20 +1346,12 @@ if len(sys.argv) < 2:
 p = parser(sys.argv[1])
 
 for v in p.global_namespace.values():
-    if not isinstance(v, procedure):
-        continue
+    if isinstance(v, procedure):
+        codegen(v)
 
-    print 'Procedure'
+    else:
+        pass    # Dump varable def
 
-    st = v.block.flatten0()
-
-    st = label_optimize(st)
-    st = jump_optimize(st)
-    st = label_optimize(st)
-    st = remove_dead_code(st)
-
-    show_proclist(st)
-    print
     pass
 
 

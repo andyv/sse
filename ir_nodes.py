@@ -6,7 +6,7 @@
 # modification, are permitted provided that the following conditions are met:
 #
 # 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer. 
+#    list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
 #    and/or other materials provided with the distribution.
@@ -28,7 +28,7 @@
 
 import sys
 
-from kw import constant
+from kw import constant, type_node
 
 from kw import type_void, type_float4, type_float8, type_int8, type_int4
 from kw import type_int2, type_int1, type_uint8, type_uint4, type_uint2
@@ -58,7 +58,7 @@ class ir_node:
         if self.prev is not None:
             self.prev.next = self.next
             pass
-        
+
         return
 
 
@@ -68,7 +68,7 @@ class ir_node:
         if self.next is not None:
             self.next.prev = node
             pass
-    
+
         node.next = self.next
         node.prev = self
 
@@ -259,7 +259,7 @@ class expr_binary(expr):
     type_map = { '+': binary_type_map, '-': binary_type_map,
                  '*': binary_type_map, '/': binary_type_map,
                  '%': binary_type_map,
-    
+
                  '>>': bitwise_type_map, '<<': bitwise_type_map,
                  '&':  bitwise_type_map, '^':  bitwise_type_map,
                  '|':  bitwise_type_map,
@@ -277,18 +277,18 @@ class expr_binary(expr):
         tb = self.b.type.basic_type
 
         try:
-            self.type = self.type_map[self.op][ta, tb]
+            self.type = type_node(self.type_map[self.op][ta, tb], 0)
 
         except KeyError:
             msg = 'Operator "%s" cannot use arguments %s/%s' % \
                   (self.op, ta.name, tb.name)
             raise parse_error, msg
-        
-        if self.type is not ta:
+
+        if self.type.basic_type != ta:
             self.a = expr_type_conv(self.type, self.a)
             pass
 
-        if self.type is not tb:
+        if self.type.basic_type != tb:
             self.b = expr_type_conv(self.type, self.b)
             pass
 
@@ -314,7 +314,7 @@ class expr_mult(expr_binary):
 
         if isinstance(self.a, constant):
             if self.a.value == 0:
-                return constant(0)
+                return constant(0, self.a.type)
 
             if self.a.value == 1:
                 return self.b
@@ -326,7 +326,7 @@ class expr_mult(expr_binary):
 
         if isinstance(self.b, constant):
             if self.b.value == 0:
-                return constant(0)
+                return constant(0, self.b.type)
 
             if self.b.value == 1:
                 return self.a
@@ -337,7 +337,7 @@ class expr_mult(expr_binary):
             pass
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value + self.b.value)
+            return constant(self.a.value + self.b.value, self.a.type)
 
         return self
 
@@ -353,7 +353,7 @@ class expr_quotient(expr_binary):
 
         if isinstance(self.a, constant):
             if self.a.value == 0:
-                return constant(0)
+                return constant(0, self.a.type)
 
             pass
 
@@ -367,7 +367,7 @@ class expr_quotient(expr_binary):
             pass
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value / self.b.value)
+            return constant(self.a.value / self.b.value, self.a.type)
 
         return self
 
@@ -382,7 +382,7 @@ class expr_modulus(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value % self.b.value)
+            return constant(self.a.value % self.b.value, self.a.type)
 
         return self
 
@@ -403,7 +403,7 @@ class expr_plus(expr_binary):
             return self.a
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value + self.b.value)
+            return constant(self.a.value + self.b.value, self.a.type)
 
         return self
 
@@ -424,7 +424,7 @@ class expr_minus(expr_binary):
             return self.a
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value - self.b.value)
+            return constant(self.a.value - self.b.value, self.a.type)
 
         return self
 
@@ -439,7 +439,7 @@ class expr_lshift(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value << self.b.value)
+            return constant(self.a.value << self.b.value, self.a.type)
 
         return self
 
@@ -454,7 +454,7 @@ class expr_rshift(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value >> self.b.value)
+            return constant(self.a.value >> self.b.value, self.a.type)
 
         return self
 
@@ -469,7 +469,7 @@ class expr_bitwise_and(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value & self.b.value)
+            return constant(self.a.value & self.b.value, self.a.type)
 
         return self
 
@@ -484,7 +484,7 @@ class expr_bitwise_xor(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value ^ self.b.value)
+            return constant(self.a.value ^ self.b.value, self.a.type)
 
         return self
 
@@ -499,7 +499,7 @@ class expr_bitwise_or(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant) and isinstance(self.b, constant):
-            return constant(self.a.value | self.b.value)
+            return constant(self.a.value | self.b.value, self.a.type)
 
         return self
 
@@ -529,7 +529,7 @@ class expr_logical_or(expr_binary):
         self.b = self.b.simplify()
 
         if isinstance(self.a, constant):
-            return self.b if self.a.value == 0 else constant(1)
+            return self.b if self.a.value == 0 else constant(1, self.a.type)
 
         return self
 
@@ -564,7 +564,7 @@ class expr_compare(expr_binary):
             else:
                 raise SystemExit, 'expr_compare.simplify(): Bad operator'
 
-            return constant(rc)
+            return constant(rc, type_node(type_int4, 0))
 
         return self
 
@@ -713,10 +713,18 @@ class expr_type_conv(expr_intrinsic):
         return
 
     def show(self):
-        sys.stdout.write('type-' + self.type.name + '(')
+        sys.stdout.write('type_' + self.type.basic_type.name + '(')
         self.arg.show()
         sys.stdout.write(')')
         return
 
-    pass
+    def simplify(self):
+        self.arg = self.arg.simplify()
 
+        if not isinstance(self.arg, constant):
+            return self
+
+        self.arg.type = self.type
+        return self.arg
+
+    pass
