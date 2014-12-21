@@ -34,9 +34,6 @@ import lexer
 import sys
 
 
-class parse_error(Exception):
-    pass
-
 
 
 def get_temp_label(index=[0]):
@@ -573,7 +570,7 @@ class parser:
         if not isinstance(t, type_name):
             raise parse_error, 'Expected type name after STATIC'
 
-        self.parse_type_decl(t, True)
+        self.parse_type_decl(type_node(t, 0), True)
         return
 
 
@@ -895,7 +892,7 @@ class parser:
             if not isinstance(t, type_name):
                 raise parse_error, 'Expected type name in argument list'
 
-            decl_type = t
+            decl_type = type_node(t, 0)
 
             w = self.lexer.next_token()
             if not isinstance(w, word):
@@ -1007,7 +1004,7 @@ class parser:
         if not isinstance(t, type_name):
             raise parse_error, 'Missing type name'
 
-        decl_type = t
+        decl_type = type_node(t, 0)
 
         name = self.lexer.next_token()
 
@@ -1095,6 +1092,8 @@ def show_proclist(st):
 
     return
 
+
+###### Initial IR optimizations
 
 
 # label_optimize()-- Label-related optimizations, mostly just to get
@@ -1253,13 +1252,13 @@ for v in p.global_namespace.values():
     print 'Procedure'
 
     st = v.block.flatten0()
+
     st = label_optimize(st)
     st = jump_optimize(st)
     st = label_optimize(st)
     st = remove_dead_code(st)
 
     show_proclist(st)
-
     print
     pass
 

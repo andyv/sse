@@ -93,6 +93,15 @@ class type_name:
     pass
 
 
+class type_node:
+    def __init__(self, basic_type, level=0):
+        self.basic_type = basic_type
+        self.level = level
+        return
+
+    pass
+
+
 class intrinsic_name:
     def __init__(self, name):
         self.name = name
@@ -102,6 +111,7 @@ class intrinsic_name:
         return 'INTRINSIC(%s)' % self.name
 
     pass
+
 
 # Tokens
 
@@ -176,7 +186,8 @@ kw_case = keyword('case')
 
 keyword_list = [
     kw_static, kw_extern, kw_return, kw_for, kw_do, kw_if, kw_else,
-    kw_while, kw_goto, kw_break, kw_continue, kw_switch, kw_case, kw_default,  ]
+    kw_while, kw_goto, kw_break, kw_continue, kw_switch, kw_case,
+    kw_default, ]
 
 # Type names
 
@@ -196,7 +207,7 @@ type_uint2 = type_name('uint2')
 type_uint1 = type_name('uint1')
 
 type_float8_2 = type_name('float8_2')
-type_float4_4 = type_name('float8_4')
+type_float4_4 = type_name('float4_4')
 
 type_int8_2 = type_name('int8_2')
 type_int4_4 = type_name('int4_4')
@@ -209,6 +220,7 @@ type_names = [
     type_uint8, type_uint4, type_uint2, type_uint1,
     type_float8_2,type_float4_4,
     type_int8_2, type_int4_4, type_int2_8, type_int1_16 ]
+
 
 # Intrinsics
 

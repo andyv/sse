@@ -30,6 +30,17 @@ import sys
 
 from kw import constant
 
+from kw import type_void, type_float4, type_float8, type_int8, type_int4
+from kw import type_int2, type_int1, type_uint8, type_uint4, type_uint2
+from kw import type_uint1, type_float8_2, type_float4_4, type_int8_2
+from kw import type_int4_4, type_int2_8, type_int1_16
+
+
+
+
+class parse_error(Exception):
+    pass
+
 
 # ir_nodes are expressions, labels and jumps linked together in a
 # double linked list.  The links are through the 'next' and 'prev'
@@ -183,12 +194,104 @@ class expr_ternary(expr):
     pass
 
 
-
 #########################
 
+binary_type_map = {}
+bitwise_type_map = {}
+logical_type_map = {}
+
+def init_btm():
+    btm = binary_type_map
+
+    for t in [ type_float8, type_float4, type_int8, type_int4, type_int2,
+               type_int1, type_uint8, type_uint4, type_uint2, type_uint1 ]:
+        btm[type_float8_2, t] = type_float8_2
+        btm[type_float4_4, t] = type_float4_4
+        btm[type_float8, t] = type_float8
+        pass
+
+    tlist = [ type_float4, type_uint8, type_int8, type_uint4, type_int4,
+              type_uint2, type_int2, type_uint1, type_int1 ]
+
+    while len(tlist) > 1:
+        t1 = tlist.pop(0)
+        btm[t1, t1] = t1
+
+        for t2 in tlist:
+            btm[t1, t2] = t1
+            pass
+
+        pass
+
+    for t1, t2 in btm.keys():
+        btm[t2, t1] = btm[t1, t2]
+        pass
+
+    btm = bitwise_type_map
+
+    tlist = [ type_uint8, type_int8, type_uint4, type_int4,
+              type_uint2, type_int2, type_uint1, type_int1 ]
+
+    while len(tlist) > 1:
+        t1 = tlist.pop(0)
+        btm[t1, t1] = t1
+        logical_type_map[t1, t1] = type_int4
+
+        for t2 in tlist:
+            btm[t1, t2] = t1
+            logical_type_map[t1, t2] = type_int4
+            pass
+
+        pass
+
+    for t1, t2 in btm.keys():
+        btm[t2, t1] = btm[t1, t2]
+        logical_type_map[t2, t1] = type_int4
+        pass
+
+    return
+
+init_btm()
+
+
 class expr_binary(expr):
+
+    type_map = { '+': binary_type_map, '-': binary_type_map,
+                 '*': binary_type_map, '/': binary_type_map,
+                 '%': binary_type_map,
+    
+                 '>>': bitwise_type_map, '<<': bitwise_type_map,
+                 '&':  bitwise_type_map, '^':  bitwise_type_map,
+                 '|':  bitwise_type_map,
+
+                 '&&': logical_type_map, '||': logical_type_map,
+                 '==': logical_type_map, '!=': logical_type_map,
+                 '<=': logical_type_map, '<':  logical_type_map,
+                 '>=': logical_type_map, '>':  logical_type_map,
+               }
+
     def __init__(self, *args):
         self.a, self.b = args
+
+        ta = self.a.type.basic_type
+        tb = self.b.type.basic_type
+
+        try:
+            self.type = self.type_map[self.op][ta, tb]
+
+        except KeyError:
+            msg = 'Operator "%s" cannot use arguments %s/%s' % \
+                  (self.op, ta.name, tb.name)
+            raise parse_error, msg
+        
+        if self.type is not ta:
+            self.a = expr_type_conv(self.type, self.a)
+            pass
+
+        if self.type is not tb:
+            self.b = expr_type_conv(self.type, self.b)
+            pass
+
         return
 
 
@@ -510,7 +613,9 @@ opposite_cond = {
 class expr_unary(expr):
     def __init__(self, arg):
         self.arg = arg
+        self.type = arg.type
         return
+
 
     def show(self):
         sys.stdout.write(self.op)
@@ -563,7 +668,6 @@ class expr_logical_not(expr_unary):
 
     def simplify(self):
         self.arg = a = self.arg.simplify()
-
         if isinstance(a, expr_compare):
             return opposite_cond[a.__class__](a.a, a.b)
 
@@ -587,6 +691,7 @@ class expr_paren(expr_unary):
     pass
 
 
+
 class expr_intrinsic(expr):
     def __init__(self, *args):
         self.name, self.arg = args
@@ -594,6 +699,21 @@ class expr_intrinsic(expr):
 
     def show(self):
         sys.stdout.write(self.name + '(')
+        self.arg.show()
+        sys.stdout.write(')')
+        return
+
+    pass
+
+
+class expr_type_conv(expr_intrinsic):
+    def __init__(self, type_decl, arg):
+        self.type = type_decl
+        self.arg = arg
+        return
+
+    def show(self):
+        sys.stdout.write('type-' + self.type.name + '(')
         self.arg.show()
         sys.stdout.write(')')
         return
