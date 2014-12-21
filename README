@@ -9,3 +9,9 @@ This program is written in pure python to make development fast.
 Modern machines are so fast that compile speed hopefully won't be a
 problem.
 
+
+The current state is not very usable.  The parser can parse a simple
+program into IR nodes.  The next project is to transform the IR into
+SSA form, then from there code generation for an x86-64 with SSE, avx
+in the future.
+
