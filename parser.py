@@ -29,8 +29,9 @@
 
 from kw import *
 from ir_nodes import *
+from types import ListType
 
-import lexer
+import lexer, ssa
 import sys
 
 
@@ -139,7 +140,7 @@ class block:
             if isinstance(sym, label):
                 continue
 
-            print sym.type.name,
+            print sym.type.basic_type,
             sym.show(True)
             print ';',
             pass
@@ -588,29 +589,28 @@ class parser:
         cond = invert_condition(self.parse_expr())
         self.lexer.required_token(tok_rparen)
 
-        body = self.current_block.body
+        result = []
 
         a = self.parse_stmt_or_block()
         end_label = get_temp_label()
 
         if not self.lexer.peek_token(kw_else):
-            body.append(jump(end_label, cond))
-            body.append(a)
-            pass
+            result.append(jump(end_label, cond))
+            result.append(a)
 
         else:
             else_label = get_temp_label()
             b = self.parse_stmt_or_block()
 
-            body.append(jump(else_label, cond))
-            body.append(a)
-            body.append(jump(end_label))
-            body.append(else_label)
-            body.append(b)
+            result.append(jump(else_label, cond))
+            result.append(a)
+            result.append(jump(end_label))
+            result.append(else_label)
+            result.append(b)
             pass
 
-        body.append(end_label)
-        return
+        result.append(end_label)
+        return result
 
 
     def parse_goto(self, t):
@@ -667,18 +667,18 @@ class parser:
 
         a = self.parse_stmt_or_block()
 
-        body = self.current_block.body
+        result = []
 
-        body.append(self.continue_label)
-        body.append(jump(self.break_label, cond))
-        body.append(a)
-        body.append(jump(self.continue_label))
-        body.append(self.break_label)
+        result.append(self.continue_label)
+        result.append(jump(self.break_label, cond))
+        result.append(a)
+        result.append(jump(self.continue_label))
+        result.append(self.break_label)
 
         self.break_label = self.break_save
         self.continue_label = self.continue_save
 
-        return
+        return result
 
 
     def parse_for(self, t):
@@ -696,13 +696,9 @@ class parser:
         top_label = get_temp_label()
 
         loop_body = self.parse_stmt_or_block()
-        body = self.current_block.body
 
-        for st in initial_list:
-            body.append(st)
-            pass
-
-        body.append(top_label)
+        result = initial_list
+        result.append(top_label)
 
         i = 0
         while i < len(cont_list):
@@ -714,22 +710,22 @@ class parser:
                 st = jump(self.break_label, st)
                 pass
 
+            result.append(st)
             i = i + 1
             pass
 
-        body.append(loop_body)
-        body.append(self.continue_label)
+        result.append(loop_body)
+        result.append(self.continue_label)
 
-        for st in final_list:
-            body.append(st)
-            pass
+        result.extend(final_list)
 
-        body.append(jump(top_label))
-        body.append(self.break_label)
+        result.append(jump(top_label))
+        result.append(self.break_label)
 
         self.break_label = self.break_save
         self.continue_label = self.continue_save
-        return
+
+        return result
 
 
     def parse_do(self, t):
@@ -746,17 +742,17 @@ class parser:
         self.lexer.required_token(tok_rparen)
         self.lexer.required_token(tok_semi)
 
-        body = self.current_block.body
+        result = []
 
-        body.append(self.continue_label)
-        body.append(loop_body)
+        result.append(self.continue_label)
+        result.append(loop_body)
 
-        body.append(jump(self.continue_label, cond))
-        body.append(self.break_label)
+        result.append(jump(self.continue_label, cond))
+        result.append(self.break_label)
 
         self.break_label = self.break_save
         self.continue_label = self.continue_save
-        return
+        return result
 
 
     def parse_continue(self, t):
@@ -863,7 +859,10 @@ class parser:
 
         while not self.lexer.peek_token(tok_rbrace):
             st = self.parse_statement()
-            if st is not None:
+            if type(st) is ListType:
+                b.body.extend(st)
+
+            elif st is not None:
                 b.body.append(st)
                 pass
 
@@ -881,8 +880,17 @@ class parser:
 # in a block.  Returns a statement structure, or a list of statements.
 
     def parse_stmt_or_block(self):
-        return self.parse_block() if self.lexer.peek_token(tok_lbrace) else \
-               self.parse_statement()
+        if self.lexer.peek_token(tok_lbrace):
+            return self.parse_block()
+
+        st = self.parse_statement()
+        if type(st) is ListType:
+            b = block(self.current_block)
+            b.body = st
+            st = b
+            pass
+
+        return st
 
 
 # parse_dummy_arglist()-- Parse a dummy argument list.  The initial
@@ -1093,7 +1101,13 @@ class parser:
 
 def show_proclist(st):
     while st is not None:
-        sys.stdout.write(5*' ')
+        if hasattr(st, 'dom'):
+            d = -1 if st.dom is None else st.dom.n
+            print '%3d  (%3d) ' % (st.n, d),
+            pass
+
+        n = 2 if isinstance(st, label) else 8
+        sys.stdout.write(n*' ')
         st.show()
         print
         st = st.next
@@ -1102,239 +1116,30 @@ def show_proclist(st):
     return
 
 
-###### Initial IR optimizations
-
-
-# label_optimize()-- Label-related optimizations, mostly just to get
-# them out of the way.
-
-def label_optimize(st):
-    temp = ir_node()       # Can't be removed
-    st.insert_prev(temp)
-
+def number_st(st):
+    n = 0
     while st is not None:
-        next_st = st.next
-
-        if not isinstance(st, label):
-            st = next_st
-            continue
-
-        if len(st.jumps) == 0:  # Remove never used labels
-            st.remove()
-            st = next_st
-            continue
-
-        if not isinstance(next_st, label):
-            st = next_st
-            continue
-
-# Replace two adjacent labels with a single label.  st stays the same
-# thing so that we can collapse multiple labels.
-
-        for j in next_st.jumps:
-            j.label = st
-            st.jumps.append(j)
-            pass
-
-        next_st.remove()
+        st.n = n
+        n = n + 1
+        st = st.next
         pass
-
-    temp.remove()
-    return temp.next
-
-
-# jump_optimize()-- Optimize jumps in a code block.
-
-def jump_optimize(st):
-    temp = ir_node()
-    st.insert_prev(temp)
-
-# Optimize jumps around other jumps
-
-    j1 = st
-
-    while j1 is not None:
-        next_st = j1.next
-
-        if not isinstance(j1, jump):
-            j1 = next_st
-            continue
-
-        j2 = j1.next
-        if j2 is None or (not isinstance(j2, jump)):
-            j1 = next_st
-            continue
-
-        lbl = j2.next
-
-        if lbl is None or (not isinstance(lbl, label)) or j1.label is not lbl:
-            j1 = next_st
-            continue
-
-        lbl.jumps.remove(j1)
-        if len(lbl.jumps) == 0:
-            lbl.remove()
-            pass
-
-        j1.label = j2.label
-        j1.cond = invert_condition(j1.cond)
-
-        j2.label.jumps.remove(j2)
-        j2.label.jumps.append(j1)
-
-        j2.remove()
-        pass
-
-
-# Optimize jumps to unconditional jumps
-
-    j1 = temp.next
-
-    while j1 is not None:
-        if not isinstance(j1, jump):
-            j1 = j1.next
-            continue
-
-        j2 = j1.label.next
-
-        if isinstance(j2, jump) and j2.cond is None:
-            j1.label.jumps.remove(j1)
-
-            j1.label = j2.label
-            j1.label.jumps.append(j1)
-            pass
-
-        j1 = j1.next
-        pass
-
-    temp.remove()
-    return temp.next
-
-
-# remove_dead_code()-- Remove statements following unconditional
-# jumps, until the next label.
-
-def remove_dead_code(st):
-    temp = ir_node()
-    st.insert_prev(temp)
-
-    while st is not None:
-        next_st = st.next
-
-        if (not isinstance(st, jump)) or (st.cond is not None):
-            st = next_st
-            continue
-
-        st = next_st
-
-        while st is not None:
-            next_st = st.next
-            if isinstance(st, label):
-                break
-
-            st.remove()
-            st = next_st
-            pass
-
-        st = next_st
-        pass
-
-    temp.remove()
-    return temp.next
-
-
-# ssa_expr0()-- Recursive function for expanding an expression node
-# into ssa form.  The new assignment statements are inserted prior to
-# the st statement.  This is a depth-first traversal.
-
-def ssa_expr0(e, st):
-
-    if isinstance(e, ( constant, variable )):
-        pass
-
-    elif isinstance(e, ( expr_binary, expr_compare )):
-        ssa_expr0(e.a, st)
-        ssa_expr0(e.b, st)
-
-        if not isinstance(e.a, ( constant, variable )):
-            t = get_temp_var(e.a.type)
-            st.insert_prev(expr_assign(t, e.a))
-            e.a = t
-            pass
-
-        if not isinstance(e.b, ( constant, variable )):
-            t = get_temp_var(e.b.type)
-            st.insert_prev(expr_assign(t, e.b))
-            e.b = t
-            pass
-
-        pass
-
-    elif isinstance(e, expr_assign):
-        ssa_expr0(e.value, st)
-
-    elif isinstance(e, expr_ternary):
-        e.predicate = ssa_expr0(e.predicate, st)
-        e.a = ssa_expr0(e.a, st)
-        e.b = ssa_expr0(e.b, st)
-
-    elif isinstance(e, ( expr_unary, expr_intrinsic )):
-        ssa_expr0(e.arg, st)
-
-        if not isinstance(e.arg, ( constant, variable )):
-            t = get_temp_var(e.arg.type)
-            st.insert_prev(expr_assign(t, e.arg))
-            e.arg = t
-            pass
-
-        pass
-
-    else:
-        raise RuntimeError, 'ssa_expr0 Unknown expr type: ' + str(type(e))
 
     return
 
 
-# ssa_expr()-- Expand expression nodes into SSA form.
-
-def ssa_expr(st):
-    temp = ir_node()
-    st.insert_prev(temp)
-
-    while st is not None:
-        if isinstance(st, expr):
-            ssa_expr0(st, st)
-
-        elif isinstance(st, jump) and st.cond is not None:
-            ssa_expr0(st.cond, st)
-            pass
-
-        st = st.next
-        pass
-
-    temp.remove()
-    return temp.next
 
 
-
-
-def codegen(proc):
+def codegen(v):
     print 'Procedure'
 
     st = v.block.flatten0()
+    st = ssa.ssa_conversion(st)
 
-    st = label_optimize(st)
-    st = jump_optimize(st)
-    st = label_optimize(st)
-    st = remove_dead_code(st)
-
-    st = ssa_expr(st)
-
+    number_st(st)
     show_proclist(st)
 
     print
     return
-
 
 
 
