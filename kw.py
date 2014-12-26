@@ -49,14 +49,15 @@ class constant:
     def __str__(self):
         return 'CONSTANT(%s)' % self.value
 
-
     def show(self):
         sys.stdout.write(str(self.value))
         return
 
-
     def simplify(self):
         return self
+
+    def used_vars(self, result):
+        return
 
     pass
 

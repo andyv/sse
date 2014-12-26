@@ -89,6 +89,11 @@ class ir_node:
         self.prev = node
         return
 
+
+    def successor(self):
+        return [] if self.next is None else [ self.next ]
+
+
     pass
 
 
@@ -115,6 +120,13 @@ class jump(ir_node):
 
         return
 
+
+    def successor(self):
+        if self.cond is None:
+            return [ self.label ]
+
+        return [ self.label ] + ir_node.successor(self)
+
     pass
 
 
@@ -136,6 +148,21 @@ class label(ir_node):
         return
 
     pass
+
+
+class phi(ir_node):
+    def __init__(self, var):
+        self.var = var
+        self.args = []
+        return
+
+    def show(self):
+        arglist = ', '.join([ v.name for v in self.args ])
+        print '%s = phi(%s)' % ( self.var.name, arglist ),
+        return
+
+    pass
+
 
 
 # Expressions are assignment statements and other binary/unary
@@ -166,6 +193,12 @@ class expr_assign(expr):
         self.value = self.value.simplify()
         return self
 
+
+    def used_vars(self, result):
+        result[self.var] = True
+        self.value.used_vars(result)
+        return
+
     pass
 
 
@@ -190,6 +223,12 @@ class expr_ternary(expr):
         self.a.simplify()
         self.b.simplify()
         return self.a if self.predicate.value else self.b
+
+    def used_vars(self, result):
+        self.predicate.used_vars(result)
+        self.predicate.a(result)
+        self.predicate.b(result)
+        return
 
     pass
 
@@ -299,6 +338,12 @@ class expr_binary(expr):
         self.a.show()
         sys.stdout.write(self.op)
         self.b.show()
+        return
+
+
+    def used_vars(self, result):
+        self.a.used_vars(result)
+        self.b.used_vars(result)
         return
 
     pass
@@ -622,6 +667,11 @@ class expr_unary(expr):
         self.arg.show()
         return
 
+
+    def used_vars(self, result):
+        self.arg.used_vars(result)
+        return
+
     pass
 
 
@@ -701,6 +751,10 @@ class expr_intrinsic(expr):
         sys.stdout.write(self.name + '(')
         self.arg.show()
         sys.stdout.write(')')
+        return
+
+    def used_vars(self, result):
+        self.arg.used_vars(result)
         return
 
     pass

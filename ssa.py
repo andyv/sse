@@ -1,6 +1,6 @@
 
 
-from ir_nodes import jump, label, ir_node
+from ir_nodes import jump, label, ir_node, expr_assign, expr, phi
 
 ### Subroutines for converting the flow graph to SSA form.
 
@@ -220,20 +220,15 @@ def ssa_expr(st):
 
 
 
-
-
-
-
-# The first step is computing immediate dominators of each node,
-# forming a dominance tree.
-
+# Compute the immediate dominators of each node
+#
 # Node m is said to dominate node n if all paths from entry to n must
 # pass through node m.  An immediate dominator is the closest such m
 # to n.  The algorithm is given by "A Fast Algorithm for Finding
 # Dominators in a Flowgraph", by Lengauer and Tarjan in "ACM
 # Transactions on Programming Languages and Systems" v1 n1 July 1979,
 # p121-141.
-
+#
 # Our implementation is a class that takes the input flowgraph as
 # input, creates a bunch of its own auxiliarly data structures,
 # determines the tree and then adds members to the flowgraph nodes.
@@ -331,7 +326,7 @@ class find_dominators:
             self.vertex[self.n] = v
             v.semi = self.n
 
-            for w in self.succ(v):
+            for w in v.successor():
                 if w.semi == 0:
                     w.parent = v
                     stack.append(w)
@@ -343,27 +338,6 @@ class find_dominators:
             pass
 
         return
-
-
-# succ()-- Given a node, return a list of successors to that node.
-
-    def succ(self, v):
-        result = []
-
-        if isinstance(v, jump):
-            result.append(v.label)
-
-            if v.cond is not None and v.next is not None:
-                result.append(v.next)
-                pass
-
-            pass
-
-        elif v.next is not None:
-            result.append(v.next)
-            pass
-            
-        return result
 
 
 # compress()-- The compress() function.
@@ -409,6 +383,151 @@ class find_dominators:
     pass
 
 
+# The next few subroutines come from "Efficiently computing static
+# single assignment form and the control dependence graph", by Cytron
+# et al in "ACM Transactions on Programming Languages and Systems" v13
+# n4, October 1991 p451-490.
+
+
+# dominance_tree()-- Given flowgraph nodes with immediate dominators,
+# compute the dominator tree.  The 'children' list contains the list
+# of nodes that are dominated by that node.
+
+def dominance_tree(graph):
+
+    st = graph
+    while st is not None:
+        st.children = []
+        st = st.next
+        pass
+
+    st = graph
+    while st is not None:
+        if st.dom is not None:
+            st.dom.children.append(st)
+            pass
+
+        st = st.next
+        pass
+
+    return
+
+
+# dominance_frontier()-- Recursive function for computing the
+# dominance frontier of each node.  The DF is computed via a bottom-up
+# traversal of the dominator tree.
+
+def dominance_frontier(x):
+
+    for child in x.children:
+        dominance_frontier(child)
+        pass
+
+    df = {}   # Dictionary avoids problem with duplicates
+
+    for y in x.successor():
+        if y.dom is not x:
+            df[y] = True
+            pass
+
+        pass
+
+    for z in x.children:
+        for y in z.DF:
+            if y.dom is not x:
+                df[y] = True
+                pass
+
+            pass
+
+        pass
+
+    x.DF = df.keys()
+    return
+
+
+
+def number_st(st):
+    n = 0
+    while st is not None:
+        st.n = n
+        n = n + 1
+        st = st.next
+        pass
+
+    return
+
+
+
+# place_phi()-- Place phi functions in the flow graph using the
+# dominance frontiers.  Returns a list of variables in use by the
+# program.
+
+def place_phi(graph):
+    iter_count = 0
+    assignments = {}
+    variables = {}
+
+    st = graph
+    while st is not None:
+        st.has_already = 0
+        st.work = 0
+
+        if isinstance(st, expr_assign):  # Create assignments map
+            if st.var in assignments:
+                assignments[st.var].append(st)
+
+            else:
+                assignments[st.var] = [ st ]
+                pass
+
+            pass
+
+        if isinstance(st, expr):
+            st.used_vars(variables)
+            pass
+
+        st = st.next
+        pass
+
+
+    variables = variables.keys()
+
+#    print 'Assignments:'
+#    for k, v in assignments.items():
+#        print 'Variable', k.name, '@', [ st.n for st in v ]
+#        pass
+#
+#    print 'Variables used:', [ v.name for v in variables ]
+
+    w = {}
+
+    for v in variables:
+        iter_count += 1
+        for x in assignments[v]:
+            x.work = iter_count
+            w[x] = True
+            pass
+
+        while len(w) > 0:
+            x = w.popitem()[0]
+            for y in x.DF:
+                if y.has_already < iter_count:
+                    y.insert_next(phi(v))
+                    y.has_already = iter_count
+                    if y.work < iter_count:
+                        y.work = iter_count
+                        w[y] = True
+                        pass
+
+                    pass
+                pass
+            pass
+        pass
+
+    return variables
+
+
 
 # ssa_conversion()-- Preform some initial optimization of the parsed
 # IR, then convert it to ssa form.
@@ -422,5 +541,14 @@ def ssa_conversion(st):
 #    st = ssa_expr(st)
 
     find_dominators(st)
+    dominance_tree(st)
+    dominance_frontier(st)
+
+    number_st(st)
+    variables = place_phi(st)
+
+    rename_variables(st, variables)
+
+
     return st
 

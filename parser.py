@@ -60,7 +60,6 @@ class variable:
 
         return
 
-
     def show(self, show_initial=False):
         print self.name,
 
@@ -71,9 +70,12 @@ class variable:
 
         return
 
-
     def simplify(self):
         return self
+
+    def used_vars(self, result):
+        result[self] = True
+        return
 
     pass
 
@@ -1106,21 +1108,15 @@ def show_proclist(st):
             print '%3d  (%3d) ' % (st.n, d),
             pass
 
+        if hasattr(st, 'DF'):
+            df = ', '.join([ str(x.n) for x in st.DF ])
+            print '[ %-15s ]' % df,
+            pass
+
         n = 2 if isinstance(st, label) else 8
         sys.stdout.write(n*' ')
         st.show()
         print
-        st = st.next
-        pass
-
-    return
-
-
-def number_st(st):
-    n = 0
-    while st is not None:
-        st.n = n
-        n = n + 1
         st = st.next
         pass
 
@@ -1135,7 +1131,6 @@ def codegen(v):
     st = v.block.flatten0()
     st = ssa.ssa_conversion(st)
 
-    number_st(st)
     show_proclist(st)
 
     print
