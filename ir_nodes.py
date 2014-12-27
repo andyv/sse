@@ -93,7 +93,6 @@ class ir_node:
     def successor(self):
         return [] if self.next is None else [ self.next ]
 
-
     pass
 
 
@@ -127,6 +126,17 @@ class jump(ir_node):
 
         return [ self.label ] + ir_node.successor(self)
 
+
+    def replace_vars(self, repl):
+        if self.cond in repl:
+            self.cond = repl[self.cond]
+
+        else:
+            self.cond.replace_vars(repl)
+            pass
+
+        return
+
     pass
 
 
@@ -140,25 +150,84 @@ class label(ir_node):
         self.name = name
         self.defined = False
         self.jumps = []
+        self.phi_list = []
         return
 
 
     def show(self):
         print '%s (%d):' % (self.name, len(self.jumps)),
+        for p in self.phi_list:
+            p.show()
+            sys.stdout.write('  ')
+            pass
+
         return
 
     pass
 
 
-class phi(ir_node):
+class variable:
+    def __init__(self, name, var_type, initial=None,
+                 q_static=None, q_extern=None):
+
+        assert(isinstance(var_type, type_node))
+
+        self.name = name
+        self.type = var_type
+
+        self.q_static = q_static
+        self.q_extern = q_extern
+        self.initial = initial
+
+        if var_type.basic_type is type_void:
+            raise parse_error, 'Variable cannot have a void type'
+
+        return
+
+    def show(self, show_initial=False):
+        print self.name,
+
+        if show_initial and self.initial is not None:
+            print '= ',
+            self.initial.show()
+            pass
+
+        return
+
+    def simplify(self):
+        return self
+
+    def replace_vars(self, repl):
+        return
+
+    def used_vars(self, result):
+        result[self] = True
+        return
+
+# next_variant()-- Return the next variant on the base variable.  The
+# variants don't have the c or stack members.  The variant is
+# automatically put on the stack.
+
+    def next_variant(self):
+        self.c += 1
+
+        v = variable('%s.%d' % ( self.name, self.c ), self.type)
+        self.stack.append(v)
+        return v
+
+    pass
+
+
+class phi:
     def __init__(self, var):
         self.var = var
+        self.lhs = None
         self.args = []
         return
 
     def show(self):
         arglist = ', '.join([ v.name for v in self.args ])
-        print '%s = phi(%s)' % ( self.var.name, arglist ),
+        print '%s = phi(%s)' % ( self.lhs.name, arglist ),
         return
 
     pass
@@ -199,6 +268,17 @@ class expr_assign(expr):
         self.value.used_vars(result)
         return
 
+
+    def replace_vars(self, repl):
+        if self.value in repl:
+            self.value = repl[self.value]
+
+        else:
+            self.value.replace_vars(repl)
+            pass
+
+        return
+
     pass
 
 
@@ -228,6 +308,31 @@ class expr_ternary(expr):
         self.predicate.used_vars(result)
         self.predicate.a(result)
         self.predicate.b(result)
+        return
+
+
+    def replace_vars(self, repl):
+        if self.predicate in repl:
+            self.predicate = repl[self.predicate]
+
+        else:
+            self.predicate.replace_vars(repl)
+            pass
+
+        if self.a in repl:
+            self.a = repl[self.a]
+
+        else:
+            self.a.replace_vars(repl)
+            pass
+
+        if self.b in repl:
+            self.b = repl[self.b]
+
+        else:
+            self.b.replace_vars(repl)
+            pass
+
         return
 
     pass
@@ -344,6 +449,24 @@ class expr_binary(expr):
     def used_vars(self, result):
         self.a.used_vars(result)
         self.b.used_vars(result)
+        return
+
+
+    def replace_vars(self, repl):
+        if self.a in repl:
+            self.a = repl[self.a]
+
+        else:
+            self.a.replace_vars(repl)
+            pass
+
+        if self.b in repl:
+            self.b = repl[self.b]
+
+        else:
+            self.b.replace_vars(repl)
+            pass
+
         return
 
     pass
@@ -664,12 +787,25 @@ class expr_unary(expr):
 
     def show(self):
         sys.stdout.write(self.op)
+        sys.stdout.write('(')
         self.arg.show()
+        sys.stdout.write(')')
         return
 
 
     def used_vars(self, result):
         self.arg.used_vars(result)
+        return
+
+
+    def replace_vars(self, repl):
+        if self.arg in repl:
+            self.arg = repl[self.arg]
+
+        else:
+            self.arg.replace_vars(repl)
+            pass
+
         return
 
     pass
@@ -755,6 +891,16 @@ class expr_intrinsic(expr):
 
     def used_vars(self, result):
         self.arg.used_vars(result)
+        return
+
+    def replace_vars(self, repl):
+        if self.arg in repl:
+            self.arg = repl[self.arg]
+
+        else:
+            self.arg.replace_vars(repl)
+            pass
+
         return
 
     pass

@@ -59,6 +59,9 @@ class constant:
     def used_vars(self, result):
         return
 
+    def replace_vars(self, repl):
+        return
+
     pass
 
 

@@ -42,43 +42,6 @@ def get_temp_label(index=[0]):
     return label('L.%d' % index[0])
 
 
-class variable:
-    def __init__(self, name, var_type, initial=None,
-                 q_static=None, q_extern=None):
-
-        assert(isinstance(var_type, type_node))
-
-        self.name = name
-        self.type = var_type
-
-        self.q_static = q_static
-        self.q_extern = q_extern
-        self.initial = initial
-
-        if var_type.basic_type is type_void:
-            raise parse_error, 'Variable cannot have a void type'
-
-        return
-
-    def show(self, show_initial=False):
-        print self.name,
-
-        if show_initial and self.initial is not None:
-            print '= ',
-            self.initial.show()
-            pass
-
-        return
-
-    def simplify(self):
-        return self
-
-    def used_vars(self, result):
-        result[self] = True
-        return
-
-    pass
-
 
 def get_temp_var(var_type, index=[0]):
     index[0] += 1

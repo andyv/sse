@@ -513,7 +513,7 @@ def place_phi(graph):
             x = w.popitem()[0]
             for y in x.DF:
                 if y.has_already < iter_count:
-                    y.insert_next(phi(v))
+                    y.phi_list.append(phi(v))
                     y.has_already = iter_count
                     if y.work < iter_count:
                         y.work = iter_count
@@ -527,6 +527,105 @@ def place_phi(graph):
 
     return variables
 
+
+# replace_vars()-- Top level variable replacement.  Returns the new
+# expression or a restructured version.
+
+def replace_vars(e, repl):
+    if e in repl:
+        return repl[e]
+
+    e.replace_vars(repl)
+    return e
+
+
+
+# replace_rhs()-- Replace variables in the right side of an
+# assignment.
+
+def replace_rhs(e):
+    repl = {}
+    e.used_vars(repl)
+
+    for v in repl.keys():
+        if len(v.stack) > 0:
+            repl[v] = v.stack[-1]
+
+        else:
+            del repl[v]
+            pass
+
+        pass
+
+    return replace_vars(e, repl)
+
+
+# rename0()-- Recursive function for renaming ssa variables.  The
+# recursion follows the dominance tree.
+
+def rename0(st):
+    lhs_vars = []
+
+    if isinstance(st, expr_assign):
+        st.value = replace_rhs(st.value)
+
+        lhs_vars.append(st.var)      # Process LHS.
+        st.var = st.var.next_variant()
+
+# Conditional jumps are like expressions that are computed and never
+# assigned.
+
+    elif isinstance(st, jump) and st.cond is not None:
+        st.cond = replace_rhs(st.cond)
+
+
+    elif isinstance(st, label):
+        for p in st.phi_list:
+            lhs_vars.append(p.var)
+            p.lhs = p.var.next_variant()
+            pass
+
+        pass
+
+# Deal with nearby phi's
+
+    for y in st.successor():
+        if isinstance(y, label):
+            for p in y.phi_list:
+                v = p.var.stack[-1]
+                p.args.append(v)
+                pass
+
+            pass
+        pass
+
+    for y in st.children:
+        rename0(y)
+        pass
+
+    for v in lhs_vars:
+        v.stack.pop()
+        pass
+
+    return
+
+
+# rename_variables()-- Rename variables, give each variable assignment
+# a version number.
+
+def rename_variables(graph, variables):
+    for v in variables:
+        v.c = 0
+        v.stack = []
+        pass
+
+    rename0(graph)
+
+    for v in variables:
+        del v.c, v.stack
+        pass
+
+    return
 
 
 # ssa_conversion()-- Preform some initial optimization of the parsed
@@ -548,7 +647,5 @@ def ssa_conversion(st):
     variables = place_phi(st)
 
     rename_variables(st, variables)
-
-
     return st
 
