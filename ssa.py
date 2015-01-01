@@ -1,6 +1,8 @@
 
 
-from ir_nodes import jump, label, ir_node, expr_assign, expr, phi
+from ir_nodes import jump, label, ir_node, expr_assign, expr_binary
+from ir_nodes import expr, phi, constant, variable, expr_ternary
+from ir_nodes import expr_compare
 
 ### Subroutines for converting the flow graph to SSA form.
 
@@ -110,6 +112,24 @@ def jump_optimize(st):
         j1 = j1.next
         pass
 
+# Remove jumps to labels that immediately follow the jump.
+
+    j1 = temp.next
+
+    while j1 is not None:
+        if not isinstance(j1, jump):
+            j1 = j1.next
+            continue
+
+        lbl = j1.next
+        if isinstance(lbl, label) and j1.label is lbl:
+            lbl.jumps.remove(j1)
+            j1.remove()
+            j1 = lbl
+            pass
+
+        pass
+
     temp.remove()
     return temp.next
 
@@ -144,6 +164,15 @@ def remove_dead_code(st):
 
     temp.remove()
     return temp.next
+
+
+
+# get_temp_var()-- Get a temporary variable of the same type as the
+# passed one.
+
+def get_temp_var(var_type, index=[0]):
+    index[0] += 1
+    return variable('T.%d' % index[0], var_type)
 
 
 # ssa_expr0()-- Recursive function for expanding an expression node
@@ -637,8 +666,6 @@ def ssa_conversion(st):
     st = label_optimize(st)
     st = remove_dead_code(st)
 
-#    st = ssa_expr(st)
-
     find_dominators(st)
     dominance_tree(st)
     dominance_frontier(st)
@@ -647,5 +674,7 @@ def ssa_conversion(st):
     variables = place_phi(st)
 
     rename_variables(st, variables)
+    st = ssa_expr(st)
+
     return st
 
