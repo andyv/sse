@@ -1,7 +1,7 @@
 
 
 from ir_nodes import jump, label, ir_node, expr_assign, expr_binary
-from ir_nodes import expr, phi, constant, variable, expr_ternary
+from ir_nodes import expr, phi, phi_arg, constant, variable, expr_ternary
 from ir_nodes import expr_compare
 
 ### Subroutines for converting the flow graph to SSA form.
@@ -125,9 +125,9 @@ def jump_optimize(st):
         if isinstance(lbl, label) and j1.label is lbl:
             lbl.jumps.remove(j1)
             j1.remove()
-            j1 = lbl
             pass
 
+        j1 = lbl
         pass
 
     temp.remove()
@@ -621,8 +621,7 @@ def rename0(st):
     for y in st.successor():
         if isinstance(y, label):
             for p in y.phi_list:
-                v = p.var.stack[-1]
-                p.args.append(v)
+                p.args.append(phi_arg(p.var.stack[-1], st))
                 pass
 
             pass
@@ -660,7 +659,9 @@ def rename_variables(graph, variables):
 # ssa_conversion()-- Preform some initial optimization of the parsed
 # IR, then convert it to ssa form.
 
-def ssa_conversion(st):
+def ssa_conversion(proc):
+    st = proc.block.flatten0()
+
     st = label_optimize(st)
     st = jump_optimize(st)
     st = label_optimize(st)
@@ -671,7 +672,14 @@ def ssa_conversion(st):
     dominance_frontier(st)
 
     number_st(st)
+
     variables = place_phi(st)
+    for v in proc.args.values():
+        if v not in variables:
+            variables.append(v)
+            pass
+
+        pass
 
     rename_variables(st, variables)
     st = ssa_expr(st)

@@ -93,6 +93,14 @@ class ir_node:
     def successor(self):
         return [] if self.next is None else [ self.next ]
 
+
+    def predecessor(self):
+        if self.prev is None or \
+               (isinstance(self.prev, jump) and self.prev.cond is None):
+            return []
+
+        return [ self.prev ]
+
     pass
 
 
@@ -163,6 +171,10 @@ class label(ir_node):
 
         return
 
+
+    def predecessor(self):
+        return ir_node.predecessor(self) + self.jumps
+
     pass
 
 
@@ -226,12 +238,23 @@ class phi:
         return
 
     def show(self):
-        arglist = ', '.join([ v.name for v in self.args ])
+        arglist = ', '.join([ a.var.name for a in self.args ])
         print '%s = phi(%s)' % ( self.lhs.name, arglist ),
         return
 
     pass
 
+
+# Phi arguments consist of variable instances and the statement node
+# that the control associated with that variable comes from.
+
+class phi_arg:
+    def __init__(self, var, node):
+        self.var = var
+        self.node = node
+        return
+
+    pass
 
 
 # Expressions are assignment statements and other binary/unary

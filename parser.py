@@ -31,7 +31,7 @@ from kw import *
 from ir_nodes import *
 from types import ListType
 
-import lexer, ssa
+import lexer, ssa, regalloc
 import sys
 
 
@@ -40,13 +40,6 @@ import sys
 def get_temp_label(index=[0]):
     index[0] += 1
     return label('L.%d' % index[0])
-
-
-
-def get_temp_var(var_type, index=[0]):
-    index[0] += 1
-    return variable('T.%d' % index[0], var_type)
-
 
 
 class procedure:
@@ -1079,6 +1072,11 @@ def show_proclist(st):
         n = 2 if isinstance(st, label) else 8
         sys.stdout.write(n*' ')
         st.show()
+
+        if hasattr(st, 'live'):
+            print ' Live:', ', '.join([ v.name for v in st.live ]),
+            pass
+
         print
         st = st.next
         pass
@@ -1091,8 +1089,9 @@ def show_proclist(st):
 def codegen(v):
     print 'Procedure'
 
-    st = v.block.flatten0()
-    st = ssa.ssa_conversion(st)
+    st = ssa.ssa_conversion(v)
+
+    regalloc.liveness(st)
 
     show_proclist(st)
 
