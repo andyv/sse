@@ -73,13 +73,16 @@ def show_live(st, info):
 # multiple new walkers to predecessor ir_nodes, When the stack is
 # empty, we're done.
 
+# The live[] list indicates live variables immediately preceding the
+# statement that it lives on.
+
 def liveness(graph):
 
     tail = None
     st = graph
     while st is not None:
         tail = st
-        st.live = []
+        st.live = {}
         st.mark = False
         st = st.next
         pass
@@ -102,6 +105,7 @@ def liveness(graph):
 
     st = graph
     while st is not None:
+        st.live = st.live.keys()
         del st.mark
         st = st.next
         pass
@@ -148,7 +152,7 @@ def liveness_regular(st, info, stack):
         if v in st.live:
             continue
 
-        st.live.append(v)
+        st.live[v] = True
         changed = True
         pass
 
@@ -180,7 +184,7 @@ def liveness_label(st, info, stack):
 
     for v in info:
         if v not in st.live:
-            st.live.append(v)
+            st.live[v] = True
             pass
 
         pass        
@@ -211,3 +215,147 @@ def liveness_label(st, info, stack):
         pass
 
     return
+
+
+# interference_graph()-- Given the program flow graph with liveness
+# information at each node, create an interference graph.  Variables
+# are the nodes, edges are pairs of variables that are simultaneously
+# live.  Links variable instances with each other through the
+# interferes[] list on each variable.  Returns a list of live
+# variables.
+
+def interference_graph(graph):
+    result = {}
+
+    st = graph
+    while st is not None:
+        for v in st.live:
+            result[v] = True
+            pass
+
+        st = st.next
+        pass
+
+    result = result.keys()
+
+    for v in result:
+        v.interference = {}
+        pass
+
+    st = graph
+    while st is not None:
+        for a in st.live:
+            for b in st.live:
+                if a is not b:
+                    a.interference[b] = True
+                    pass
+
+                pass
+            pass
+
+        st = st.next
+        pass
+
+    for v in result:
+        v.interference = v.interference.keys()
+        pass
+
+    return result
+
+
+def show_interference(graph):
+    variables = {}
+    st = graph
+
+    while st is not None:
+        for v in st.live:
+            variables[v] = True
+            pass
+
+        st = st.next
+        pass
+
+    for v in variables.keys():
+        print v.name, '-->',
+        for w in v.interference:
+            print w.name,
+            pass
+
+        print
+        pass
+
+    return
+
+
+
+# var_dominance()-- Create a list of variable dominance order.  This
+# means traversing the dominance tree, adding variable definitions in
+# post-order.  This forms a perfect elimination order for coloring,
+
+def var_dominance(st):
+    result = []
+
+    for child in st.children:
+        result += var_dominance(child)
+        pass
+
+    if isinstance(st, expr_assign):
+        result.append(st.var)
+
+    elif isinstance(st, label):
+        for p in st.phi_list:
+            result.append(p.lhs)
+            pass
+
+        pass
+
+    return result
+
+
+# color_graph()-- Color registers.  We start be considering all
+# variables to not be part of the interference graph, then add one
+# node at a time, in the reverse of the perfect-elimination-order,
+# looking at the present variables to find a unique color.
+
+def color_graph(graph):
+    peo = var_dominance(graph)
+
+    for v in peo:
+        v.present = False
+        if not hasattr(v, 'interference'):
+            v.interference = []
+            pass
+
+        pass
+
+    peo.reverse()
+
+    for v in peo:
+        colors = {}
+
+        for w in v.interference:
+            if w.present:
+                colors[w.color] = True
+                pass
+
+            pass
+
+        c = 0
+        while True:
+            if c not in colors:
+                break
+
+            c = c + 1
+            pass
+
+        v.color = c
+        v.present = True
+        pass
+
+    for v in peo:
+        del v.present
+        print v.name, v.color
+        pass
+
+    return
+

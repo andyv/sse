@@ -1059,6 +1059,11 @@ class parser:
 
 def show_proclist(st):
     while st is not None:
+
+        if hasattr(st, 'live'):
+            print 'Live:', ', '.join([ v.name for v in st.live ])
+            pass
+
         if hasattr(st, 'dom'):
             d = -1 if st.dom is None else st.dom.n
             print '%3d  (%3d) ' % (st.n, d),
@@ -1072,10 +1077,6 @@ def show_proclist(st):
         n = 2 if isinstance(st, label) else 8
         sys.stdout.write(n*' ')
         st.show()
-
-        if hasattr(st, 'live'):
-            print ' Live:', ', '.join([ v.name for v in st.live ]),
-            pass
 
         print
         st = st.next
@@ -1092,10 +1093,12 @@ def codegen(v):
     st = ssa.ssa_conversion(v)
 
     regalloc.liveness(st)
+    regalloc.interference_graph(st)
 
     show_proclist(st)
 
-    print
+    regalloc.color_graph(st)
+
     return
 
 
