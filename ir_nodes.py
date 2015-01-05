@@ -951,3 +951,52 @@ class expr_type_conv(expr_intrinsic):
         return self.arg
 
     pass
+
+
+# number_st()-- Utility for show_flowgraph that assigns statement
+# numbers to ir_nodes.
+
+def number_st(graph):
+    n = 0
+    st = graph
+    while st is not None:
+        st.n = n
+        n = n + 1
+        st = st.next
+        pass
+
+    return
+
+
+# show_flowgraph()-- Show the flow graph.  This subroutine is capable
+# of show nodes at several different stages of compilation.
+
+def show_flowgraph(graph):
+    number_st(graph)
+    st = graph
+
+    while st is not None:
+        if hasattr(st, 'live'):
+            print 'Live:', ', '.join([ v.name for v in st.live ])
+            pass
+
+        if hasattr(st, 'dom'):
+            d = -1 if st.dom is None else st.dom.n
+            print '%3d  (%3d) ' % (st.n, d),
+            pass
+
+        if hasattr(st, 'DF'):
+            df = ', '.join([ str(x.n) for x in st.DF ])
+            print '[ %-15s ]' % df,
+            pass
+
+        n = 2 if isinstance(st, label) else 8
+        sys.stdout.write(n*' ')
+        st.show()
+
+        print
+        st = st.next
+        pass
+
+    return
+

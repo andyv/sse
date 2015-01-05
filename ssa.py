@@ -1,8 +1,33 @@
 
+# (C) 2014-2015 Andrew Vaught
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer. 
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+# WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+
+# POSSIBILITY OF SUCH DAMAGE.
+
 
 from ir_nodes import jump, label, ir_node, expr_assign, expr_binary
 from ir_nodes import expr, phi, phi_arg, constant, variable, expr_ternary
-from ir_nodes import expr_compare
+from ir_nodes import expr_compare, show_flowgraph
 
 ### Subroutines for converting the flow graph to SSA form.
 
@@ -265,7 +290,6 @@ def ssa_expr(st):
 # the original nodes.  After exit, the auxiliary structures vanish
 # leaving the augmented flowgraph.
 
-
 class find_dominators:
     def __init__(self, graph):
         if graph is None:
@@ -274,8 +298,6 @@ class find_dominators:
         self.graph = graph
 
         st = graph
-        n = 1
-
         while st is not None:
             st.bucket = []
             st.pred = []
@@ -286,12 +308,11 @@ class find_dominators:
             st.child = 0
 
             st = st.next
-            n = n + 1
             pass
 
-# The vertex[] list translates vertex number to the vertex, 1-based.
-        self.vertex = {}
+# The vertex dictionary translates vertex number to the vertex, 1-based.
 
+        self.vertex = {}
         self.n = 0
         self.depth_search()
 
@@ -339,17 +360,17 @@ class find_dominators:
 
 # depth_search()-- Depth search of the flow graph.  Python's default
 # recursion limit is 1000 frames, which is not very good long term.
-# We instead opt for maintaining a stack of unexplored nodes.  Doing
-# it this way doesn't result in deep stacks like a recursive
+# We instead opt for maintaining a queue of unexplored nodes.  Doing
+# it this way doesn't result in a deep stack like a recursive
 # depth_search() would.
 
     def depth_search(self):
-        stack = []
-        stack.append(self.graph)
+        queue = []
+        queue.append(self.graph)
         self.graph.parent = None
 
-        while len(stack) > 0:
-            v = stack.pop()
+        while len(queue) > 0:
+            v = queue.pop(0)
             self.n += 1
 
             self.vertex[self.n] = v
@@ -358,7 +379,7 @@ class find_dominators:
             for w in v.successor():
                 if w.semi == 0:
                     w.parent = v
-                    stack.append(w)
+                    queue.append(w)
                     pass
 
                 w.pred.append(v)
@@ -473,19 +494,6 @@ def dominance_frontier(x):
 
     x.DF = df.keys()
     return
-
-
-
-def number_st(st):
-    n = 0
-    while st is not None:
-        st.n = n
-        n = n + 1
-        st = st.next
-        pass
-
-    return
-
 
 
 # place_phi()-- Place phi functions in the flow graph using the
@@ -671,7 +679,6 @@ def ssa_conversion(proc):
     dominance_tree(st)
     dominance_frontier(st)
 
-    number_st(st)
 
     variables = place_phi(st)
     for v in proc.args.values():

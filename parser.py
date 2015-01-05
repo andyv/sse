@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# (C) 2014 Andrew Vaught
+# (C) 2014-2015 Andrew Vaught
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -1057,47 +1057,16 @@ class parser:
 
 
 
-def show_proclist(st):
-    while st is not None:
-
-        if hasattr(st, 'live'):
-            print 'Live:', ', '.join([ v.name for v in st.live ])
-            pass
-
-        if hasattr(st, 'dom'):
-            d = -1 if st.dom is None else st.dom.n
-            print '%3d  (%3d) ' % (st.n, d),
-            pass
-
-        if hasattr(st, 'DF'):
-            df = ', '.join([ str(x.n) for x in st.DF ])
-            print '[ %-15s ]' % df,
-            pass
-
-        n = 2 if isinstance(st, label) else 8
-        sys.stdout.write(n*' ')
-        st.show()
-
-        print
-        st = st.next
-        pass
-
-    return
-
-
-
 
 def codegen(v):
     print 'Procedure'
+    graph = ssa.ssa_conversion(v)
 
-    st = ssa.ssa_conversion(v)
+    regalloc.liveness(graph)
+    regalloc.interference_graph(graph)
 
-    regalloc.liveness(st)
-    regalloc.interference_graph(st)
-
-    show_proclist(st)
-
-    regalloc.color_graph(st)
+    show_flowgraph(graph)
+    regalloc.color_graph(graph)
 
     return
 

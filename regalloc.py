@@ -1,5 +1,5 @@
 
-# (C) 2014 Andrew Vaught
+# (C) 2014-2915 Andrew Vaught
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
