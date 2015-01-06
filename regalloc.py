@@ -193,6 +193,10 @@ def liveness_label(st, info, stack):
 
     for phi_node in st.phi_list:
         for arg in phi_node.args:
+            if arg.node is st.prev:
+                st.live[arg.var] = True
+                pass
+
             new_info = info[:]
             if arg.var not in new_info:
                 new_info.append(arg.var)
@@ -319,6 +323,7 @@ def var_dominance(st):
 
 def color_graph(graph):
     peo = var_dominance(graph)
+    print [ v.name for v in peo ]
 
     for v in peo:
         v.present = False
@@ -356,6 +361,66 @@ def color_graph(graph):
         del v.present
         print v.name, v.color
         pass
+
+    return
+
+
+# phi_merge()-- Insert code that implements the phi-assignments for
+# each entry to a label.  One phi function at a label means a possible
+# assignment.  Multiple phi functions imply a permutation of hardware
+# registers.  If a control reaches a label via a conditional jump,
+# then the code around the jump may need to be restructured.
+
+def phi_merge(graph):
+
+    st = graph
+    while st is not None:
+        if isinstance(st, label):
+            merge_label(st)
+            pass
+
+        st = st.next
+        pass
+
+    return
+
+
+# merge_label()-- Handle the phi maerging for a single label.  For
+# each label entry point, we collect the phi-arguments, then pass them
+# along to merge_single_entry().
+
+def merge_label(st):
+
+    entry = {}
+
+    for phi in st.phi_list:
+        for arg in phi.arg_list:
+            t = arg.var, phi.lhs
+
+            if arg.node in entry:
+                entry[arg.node].append(t)
+
+            else:
+                entry[arg.node] = [ t ]
+                pass
+
+            entry[arg.node] = True
+            pass
+
+        pass
+
+    for entry, plist in entry.items():
+        merge_single_entry(st, entry, plist)
+        pass
+
+    return
+
+
+# merge_single_entry()-- Given the entry point of a label st...
+
+def merge_single_entry(st, entry, plist):
+
+    
 
     return
 
