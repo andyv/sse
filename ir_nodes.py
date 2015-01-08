@@ -152,7 +152,6 @@ class jump(ir_node):
 # The 'jumps' member is a list of jump nodes that jump to this label,
 # conditionally or unconditionally.
 
-
 class label(ir_node):
     def __init__(self, name):
         self.name = name
@@ -176,6 +175,12 @@ class label(ir_node):
         return ir_node.predecessor(self) + self.jumps
 
     pass
+
+
+
+def get_temp_label(index=[0]):
+    index[0] += 1
+    return label('L.%d' % index[0])
 
 
 class variable:
@@ -304,6 +309,25 @@ class expr_assign(expr):
 
     pass
 
+
+# expr_swaps always have variables for arguments, they are produced
+# deep in the phi-merging code.
+
+class expr_swap(expr):
+
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+        return
+
+    def show(self):
+        sys.stdout.write('swap ')
+        self.a.show()
+        sys.stdout.write(', ')
+        self.b.show()
+        return
+
+    pass
 
 
 class expr_ternary(expr):
@@ -951,6 +975,14 @@ class expr_type_conv(expr_intrinsic):
         return self.arg
 
     pass
+
+
+# invert_condition()-- Invert the condition, simplifying.
+
+def invert_condition(e):
+    e = expr_logical_not(e)
+    return e.simplify()
+
 
 
 # number_st()-- Utility for show_flowgraph that assigns statement

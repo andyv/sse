@@ -36,12 +36,6 @@ import sys
 
 
 
-
-def get_temp_label(index=[0]):
-    index[0] += 1
-    return label('L.%d' % index[0])
-
-
 class procedure:
     def __init__(self, name, decl_type):
         self.name = name
@@ -174,15 +168,6 @@ class block:
         return head
 
     pass
-
-
-
-
-# invert_condition()-- Invert the condition, simplifying.
-
-def invert_condition(e):
-    e = expr_logical_not(e)
-    return e.simplify()
 
 
 
@@ -1061,13 +1046,7 @@ class parser:
 def codegen(v):
     print 'Procedure'
     graph = ssa.ssa_conversion(v)
-
-    regalloc.liveness(graph)
-    regalloc.interference_graph(graph)
-
-    show_flowgraph(graph)
-    regalloc.color_graph(graph)
-
+    regalloc.allocate(graph)
     return
 
 

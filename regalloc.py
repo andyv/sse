@@ -21,14 +21,14 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
 # WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-
 # POSSIBILITY OF SUCH DAMAGE.
 
 
 # Register allocation
 
 
-from ir_nodes import expr, expr_assign, label, jump
+from ir_nodes import expr, expr_swap, expr_assign, label, jump, show_flowgraph
+from ir_nodes import get_temp_label, invert_condition
 
 
 
@@ -340,7 +340,7 @@ def color_graph(graph):
 
         for w in v.interference:
             if w.present:
-                colors[w.color] = True
+                colors[w.register] = True
                 pass
 
             pass
@@ -353,13 +353,12 @@ def color_graph(graph):
             c = c + 1
             pass
 
-        v.color = c
+        v.register = c
         v.present = True
         pass
 
     for v in peo:
         del v.present
-        print v.name, v.color
         pass
 
     return
@@ -372,7 +371,6 @@ def color_graph(graph):
 # then the code around the jump may need to be restructured.
 
 def phi_merge(graph):
-
     st = graph
     while st is not None:
         if isinstance(st, label):
@@ -390,11 +388,13 @@ def phi_merge(graph):
 # along to merge_single_entry().
 
 def merge_label(st):
-
     entry = {}
 
     for phi in st.phi_list:
-        for arg in phi.arg_list:
+        for arg in phi.args:
+            if arg.var.register == phi.lhs.register:
+                continue    # Discard assignments to same register
+
             t = arg.var, phi.lhs
 
             if arg.node in entry:
@@ -404,7 +404,6 @@ def merge_label(st):
                 entry[arg.node] = [ t ]
                 pass
 
-            entry[arg.node] = True
             pass
 
         pass
@@ -416,11 +415,133 @@ def merge_label(st):
     return
 
 
-# merge_single_entry()-- Given the entry point of a label st...
+# merge_single_entry()-- Given the phi-assignment label st, the entry
+# node 'entry', and the list of phi-assignments, figure out the move
+# or swaps that make the phi-assignments happen.
 
 def merge_single_entry(st, entry, plist):
 
-    
+    print '-------'
+    for a, b in plist:
+        print '%s (%d) -> %s (%d)' % (a.name, a.register, b.name, b.register)
+        pass
+
+    instructions = merge_instructions(plist)
+
+# Now insert these instruction on the entry path.  If the entry is not
+# a jump, then the phi follows this instruction, so insert the new
+# instruction prior to the phi.
+
+    if not isinstance(entry, jump):
+        for n in instructions:
+            st.insert_prev(n)
+            pass
+
+        pass
+
+    elif entry.cond is None:
+
+# For an entry via an unconditional jump, insert the instructions
+# prior to the jump.
+        for n in instructions:
+            entry.insert_prev(n)
+            pass
+
+        pass
+
+    else:
+
+# Nastiness because we have to insert a new code path along the jump.
+#
+#   jump L1 if a
+#
+# becomes
+#
+#   jump L2 if !a
+#   <new instructions>
+#   jump L1
+# L2:
+
+        new_label = get_temp_label()
+        new_label.insert_next(entry)
+
+        jump(entry.label).inset_next(entry)
+
+        for n in instructions:
+            entry.insert_next(n)
+            pass
+
+        entry.label = new_label
+        entry.cond = invert_condition(entry.cond)
+        pass
+
+    return
+
+
+# merge_instructions()-- Take the plist, un-zip it into two vectors, a
+# from vector and a 'to' vector.  We look at the register entries but
+# generate instructions in terms of variables.
+
+def merge_instructions(plist):
+    if len(plist) == 1:
+        a, b = plist[0]
+        return [ expr_assign(b, a) ]
+
+    v_from = []
+    v_to = []
+
+    phys_from = []
+    phys_to = []
+
+    for a, b in plist:
+        v_from.append(a)
+        phys_from.append(a.register)
+
+        v_to.append(b)
+        phys_to.append(b.register)
+        pass
+
+# Figure out a sequence of swaps to transform v_from to v_to.  We do a
+# real simple method of bringing each element into position in
+# sequence.  There is surely a more optimum way.
+
+    n = 0
+    result = []
+
+    while n < len(v_from):
+        if phys_from[n] is not phys_to[n]:
+            k = phys_from.index(phys_to[n])
+
+            e = expr_swap(v_from[k], v_to[n])
+            result.append(e)
+
+            t = v_to[n]
+            v_to[n] = v_from[k]
+            v_from[k] = t
+
+            t = phys_to[n]
+            phys_to[n] = phys_from[k]
+            phys_from[k] = t
+            pass
+
+        n = n + 1
+        pass
+
+    return result
+
+
+
+
+# allocate()-- Allocate registes
+
+def allocate(graph):
+
+    liveness(graph)
+    interference_graph(graph)
+    color_graph(graph)
+    phi_merge(graph)
+
+    show_flowgraph(graph)
 
     return
 
