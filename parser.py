@@ -31,9 +31,8 @@ from kw import *
 from ir_nodes import *
 from types import ListType
 
-import lexer, ssa, regalloc
+import lexer, ssa, regalloc, codegen
 import sys
-
 
 
 class procedure:
@@ -1043,10 +1042,11 @@ class parser:
 
 
 
-def codegen(v):
+def generate_code(v):
     print 'Procedure'
     graph = ssa.ssa_conversion(v)
     regalloc.allocate(graph)
+    codegen.generate_assembler(graph)
     return
 
 
@@ -1060,7 +1060,7 @@ p = parser(sys.argv[1])
 
 for v in p.global_namespace.values():
     if isinstance(v, procedure):
-        codegen(v)
+        generate_code(v)
 
     else:
         pass    # Dump varable def

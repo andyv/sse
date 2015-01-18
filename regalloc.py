@@ -26,10 +26,18 @@
 
 # Register allocation
 
-
 from ir_nodes import expr, expr_swap, expr_assign, label, jump, show_flowgraph
-from ir_nodes import get_temp_label, invert_condition
+from ir_nodes import get_temp_label, invert_condition, integer_register
 
+from ir_nodes import reg_a, reg_b, reg_c, reg_d, reg_src, reg_dst, reg_base
+from ir_nodes import reg_8, reg_9, reg_10, reg_11, reg_12, reg_13, reg_14
+from ir_nodes import reg_15, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
+from ir_nodes import xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15
+
+from kw import type_int8, type_int4, type_int2, type_int1, type_uint8
+from kw import type_uint4, type_uint2, type_uint1, type_float4, type_float8
+from kw import type_float8_2,type_float4_4, type_int8_2, type_int4_4
+from kw import type_int2_8, type_int1_16
 
 
 import sys
@@ -50,9 +58,7 @@ def show_live(st, info):
         pass
 
     sys.stdin.readline()
-
     return
-        
 
 
 # liveness()-- Compute the list of live variables for each node.
@@ -316,6 +322,49 @@ def var_dominance(st):
     return result
 
 
+# pick_register()-- Given a variable v, pick a register for it.  TODO:
+# memory registers not re-used like machine registers are.
+
+def pick_register(v):
+    bt = v.type.basic_type
+
+    if bt in [ type_int8, type_int4, type_int2, type_int1,
+               type_uint8, type_uint4, type_uint2, type_uint1 ]:
+
+        reglist = [ reg_b, reg_c, reg_d, reg_src, reg_dst, reg_base, reg_8,
+                    reg_9, reg_10, reg_11, reg_12, reg_13, reg_14, reg_15 ]
+
+    elif bt in [ type_float4, type_float8, type_float8_2,type_float4_4,
+                 type_int8_2, type_int4_4, type_int2_8, type_int1_16 ]:
+
+        reglist = [ xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7,
+                    xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15 ]
+
+    else:
+        raise RuntimeError, 'pick_register(): Unknown type'
+
+    for w in v.interference:
+        if v.present and (not isinstance(v.register, memory)):
+            r = v.register
+
+            if isinstance(r, integer_subreg):
+                r = r.parent
+                pass
+
+            reglist.remove(r)
+            pass
+
+        pass
+
+    r = reglist.pop(0) if len(reglist) > 0 else get_memory_register()
+
+    if isinstance(r, integer_register):
+        r = r.get_subreg(v.type)
+        pass
+
+    return r
+
+
 # color_graph()-- Color registers.  We start be considering all
 # variables to not be part of the interference graph, then add one
 # node at a time, in the reverse of the perfect-elimination-order,
@@ -336,24 +385,7 @@ def color_graph(graph):
     peo.reverse()
 
     for v in peo:
-        colors = {}
-
-        for w in v.interference:
-            if w.present:
-                colors[w.register] = True
-                pass
-
-            pass
-
-        c = 0
-        while True:
-            if c not in colors:
-                break
-
-            c = c + 1
-            pass
-
-        v.register = c
+        v.register = pick_register(v)
         v.present = True
         pass
 
@@ -530,18 +562,15 @@ def merge_instructions(plist):
     return result
 
 
-
-
 # allocate()-- Allocate registes
 
 def allocate(graph):
-
     liveness(graph)
     interference_graph(graph)
     color_graph(graph)
     phi_merge(graph)
 
-    show_flowgraph(graph)
+#    show_flowgraph(graph)
 
     return
 

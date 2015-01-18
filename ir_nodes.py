@@ -1,6 +1,5 @@
 
-
-# (C) 2014 Andrew Vaught
+# (C) 2014-2015 Andrew Vaught
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -36,8 +35,6 @@ from kw import type_uint1, type_float8_2, type_float4_4, type_int8_2
 from kw import type_int4_4, type_int2_8, type_int1_16
 
 
-
-
 class parse_error(Exception):
     pass
 
@@ -62,7 +59,7 @@ class ir_node:
         return
 
 
-# insert_next()-- Insert a node after this one
+# insert_next()-- Insert a node after this one.
 
     def insert_next(self, node):
         if self.next is not None:
@@ -160,7 +157,6 @@ class label(ir_node):
         self.phi_list = []
         return
 
-
     def show(self):
         print '%s (%d):' % (self.name, len(self.jumps)),
         for p in self.phi_list:
@@ -169,7 +165,6 @@ class label(ir_node):
             pass
 
         return
-
 
     def predecessor(self):
         return ir_node.predecessor(self) + self.jumps
@@ -262,12 +257,16 @@ class phi_arg:
     pass
 
 
+
+
 # Expressions are assignment statements and other binary/unary
 # expressions.
 
 class expr(ir_node):
-    pass
+    def jump_opcode(self):
+        return 'jnz'
 
+    pass
 
 
 # Sub-classes of expressions
@@ -314,7 +313,6 @@ class expr_assign(expr):
 # deep in the phi-merging code.
 
 class expr_swap(expr):
-
     def __init__(self, a, b):
         self.a = a
         self.b = b
@@ -326,6 +324,17 @@ class expr_swap(expr):
         sys.stdout.write(', ')
         self.b.show()
         return
+
+    def get_insn(self):
+        r1 = self.a.register
+        r2 = self.b.register
+
+        if (not r1.memory) or (not r2.memory):
+            return [ insn_exchange(r1, r2) ]
+
+        temp = get_temp_reg(self.r1.type)
+        return [ insn_move(r1, temp), insn_exchange(temp, r2),
+                 insn_move(r2, temp) ]
 
     pass
 
@@ -516,9 +525,6 @@ class expr_binary(expr):
 
         return
 
-    pass
-
-
 
 class expr_mult(expr_binary):
     op = '*'
@@ -606,6 +612,7 @@ class expr_modulus(expr_binary):
 
 class expr_plus(expr_binary):
     op = '+'
+    arith_op = 'add'
 
     def simplify(self):
         self.a = self.a.simplify()
@@ -678,6 +685,7 @@ class expr_rshift(expr_binary):
 
 class expr_bitwise_and(expr_binary):
     op = '&'
+    arith_op = 'and'
 
     def simplify(self):
         self.a = self.a.simplify()
@@ -693,6 +701,7 @@ class expr_bitwise_and(expr_binary):
 
 class expr_bitwise_xor(expr_binary):
     op = '^'
+    arith_op = 'xor'
 
     def simplify(self):
         self.a = self.a.simplify()
@@ -708,6 +717,7 @@ class expr_bitwise_xor(expr_binary):
 
 class expr_bitwise_or(expr_binary):
     op = '|'
+    arith_op = 'or'
 
     def simplify(self):
         self.a = self.a.simplify()
@@ -717,6 +727,9 @@ class expr_bitwise_or(expr_binary):
             return constant(self.a.value | self.b.value, self.a.type)
 
         return self
+
+    def get_insn(self, result):
+        return self.get_commutative_binary_insn('or', result)
 
     pass
 
@@ -783,32 +796,60 @@ class expr_compare(expr_binary):
 
         return self
 
+
+    def get_insn(self, result):
+        return self.get_noncommutative_binary_insn('cmp', result)
+
     pass
 
 
 
 class expr_equal(expr_compare):
     op = '=='
+
+    def jump_opcode(self):
+        return 'je'
+    
     pass
 
 class expr_not_equal(expr_compare):
     op = '!='
+
+    def jump_opcode(self):
+        return 'jne'
+    
     pass
 
 class expr_less(expr_compare):
     op = '<'
+
+    def jump_opcode(self):
+        return 'jlt'
+
     pass
 
 class expr_less_equal(expr_compare):
     op = '<='
+
+    def jump_opcode(self):
+        return 'jle'
+
     pass
 
 class expr_greater(expr_compare):
     op = '>'
+
+    def jump_opcode(self):
+        return 'jgt'
+
     pass
 
 class expr_greater_equal(expr_compare):
     op = '>='
+
+    def jump_opcode(self):
+        return 'jge'
+
     pass
 
 
@@ -983,6 +1024,122 @@ def invert_condition(e):
     e = expr_logical_not(e)
     return e.simplify()
 
+
+
+### Machine registers
+
+class register:
+    def __str__(self):
+        return self.name
+
+    pass
+
+
+# Constants like reg_a represent the rax register, the sub-registers
+# are the ones actually used inside insn nodes.  The 'name' member is
+# the name that shows up on the assembler output.
+
+class integer_subreg(register):
+    memory = False
+
+    def __init__(self, name):
+        self.name = '%' + name
+        return
+
+    pass
+
+
+class integer_register(register):
+    def __init__(self, n64, n32, n16, n8):
+        r8 = integer_subreg(n64)
+        r4 = integer_subreg(n32)
+        r2 = integer_subreg(n16)
+        r1 = integer_subreg(n8)
+
+        self.map = { type_int1: r1, type_uint1: r1,
+                     type_int2: r2, type_uint2: r2,
+                     type_int4: r4, type_uint4: r4,
+                     type_int8: r8, type_uint8: r8, }
+
+        for v in [ r1, r2, r4, r8 ]:
+            v.parent = self
+            pass
+
+        return
+
+    def get_subreg(self, t):
+        return self.map[type_uint8] if t.level >= 0 else self.map[t.basic_type]
+
+    pass
+
+reg_a = integer_register('rax', 'eax', 'ax', 'al')
+reg_b = integer_register('rbx', 'ebx', 'bx', 'bl')
+reg_c = integer_register('rcx', 'ecx', 'cx', 'cl')
+reg_d = integer_register('rdx', 'edx', 'dx', 'dl')
+
+reg_src  = integer_register('rsi', 'esi', 'si', 'sil')
+reg_dst  = integer_register('rdi', 'edi', 'di', 'dil')
+reg_base = integer_register('rbp', 'ebp', 'bp', 'bpl')
+
+reg_8  = integer_register('r8', 'r8d', 'r8l', 'r8b')
+reg_9  = integer_register('r9', 'r9d', 'r9l', 'r9b')
+reg_10 = integer_register('r10', 'r10d', 'r10l', 'r10b')
+reg_11 = integer_register('r11', 'r11d', 'r11l', 'r11b')
+reg_12 = integer_register('r12', 'r12d', 'r12l', 'r12b')
+reg_13 = integer_register('r13', 'r13d', 'r13l', 'r13b')
+reg_14 = integer_register('r14', 'r14d', 'r14l', 'r14b')
+reg_15 = integer_register('r15', 'r15d', 'r15l', 'r15b')
+
+integer_regs = [ reg_a, reg_b, reg_c, reg_d, reg_src, reg_dst, reg_base,
+                 reg_8, reg_9, reg_10, reg_11, reg_12, reg_13, reg_14, reg_15 ]
+
+class xmm_register(register):
+    mem = False
+
+    def __init__(self, name):
+        self.name = name
+        return
+
+    pass
+
+xmm0 = xmm_register('xmm0')
+xmm1 = xmm_register('xmm1')
+xmm2 = xmm_register('xmm2')
+xmm3 = xmm_register('xmm3')
+xmm4 = xmm_register('xmm4')
+xmm5 = xmm_register('xmm5')
+xmm6 = xmm_register('xmm6')
+xmm7 = xmm_register('xmm7')
+
+xmm8 = xmm_register('xmm8')
+xmm9 = xmm_register('xmm9')
+xmm10 = xmm_register('xmm10')
+xmm11 = xmm_register('xmm11')
+xmm12 = xmm_register('xmm12')
+xmm13 = xmm_register('xmm13')
+xmm14 = xmm_register('xmm14')
+xmm15 = xmm_register('xmm15')
+
+xmm_regs = [ xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7,
+             xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15 ]
+
+
+# Memory registers are regular registers that happen to map to memory
+# instead of a cpu register.
+
+class memory(register):
+    mem = True
+
+    def __init__(self, n):
+        self.n = n
+        return
+
+    pass
+
+
+def get_memory_register(count=[0]):
+    count[0] += 1
+    return memory(count[0])
 
 
 # number_st()-- Utility for show_flowgraph that assigns statement
