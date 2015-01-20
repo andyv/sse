@@ -47,7 +47,7 @@ class constant:
         return
 
     def __str__(self):
-        return str(self.value)
+        return '$' + str(self.value)
 
     def show(self):
         sys.stdout.write(str(self.value))

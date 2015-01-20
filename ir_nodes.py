@@ -796,10 +796,6 @@ class expr_compare(expr_binary):
 
         return self
 
-
-    def get_insn(self, result):
-        return self.get_noncommutative_binary_insn('cmp', result)
-
     pass
 
 

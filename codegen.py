@@ -25,8 +25,12 @@
 
 import string
 
-from ir_nodes import expr_assign, expr_binary, expr_unary, expr_compare
-from ir_nodes import integer_subreg, memory, variable
+from ir_nodes import expr_assign, expr_binary, expr_unary, expr_compare, label
+from ir_nodes import jump, integer_subreg, memory, variable, opposite_cond
+
+from ir_nodes import expr_equal, expr_not_equal, expr_less
+from ir_nodes import expr_less_equal, expr_greater, expr_greater_equal
+
 
 from kw import constant
 
@@ -36,15 +40,57 @@ from kw import type_uint1, type_float8_2, type_float4_4, type_int8_2
 from kw import type_int4_4, type_int2_8, type_int1_16
 
 
-invert_jmp = {
-    'je': 'jne',    'jne': 'je',
-    'jz': 'jnz',    'jnz': 'jz',
 
-    'jb': 'jae',    'jae': 'jb',
-    'ja': 'jbe',    'jbe': 'ja',
+def signed_type(t):
+    return t.basic_type in [ type_int8, type_int4, type_int2, type_int1 ]
 
-    'jg': 'jle',    'jle': 'jg',
-    'jl': 'jge',    'jge': 'jl',  }
+
+# Convert an expr_compare instance to assembler mnemonics.
+
+signed_jump_map = {
+    expr_equal:          'je',
+    expr_not_equal:      'jne',
+    expr_less:           'jlt',
+    expr_less_equal:     'jle',
+    expr_greater:        'jgt',
+    expr_greater_equal:  'jge' }
+
+unsigned_jump_map = {
+    expr_equal:          'je',
+    expr_not_equal:      'jne',
+    expr_less:           'jb',
+    expr_less_equal:     'jbe',
+    expr_greater:        'ja',
+    expr_greater_equal:  'jae' }
+
+
+def convert_jump(cond, signed):
+    cond_map = signed_jump_map if signed else unsigned_jump_map
+    return cond_map[cond]
+
+
+signed_set_map = {
+    expr_equal:          'sete',
+    expr_not_equal:      'setne',
+    expr_less:           'setlt',
+    expr_less_equal:     'setle',
+    expr_greater:        'setgt',
+    expr_greater_equal:  'setge' }
+
+unsigned_set_map = {
+    expr_equal:          'sete',
+    expr_not_equal:      'setne',
+    expr_less:           'setb',
+    expr_less_equal:     'setbe',
+    expr_greater:        'seta',
+    expr_greater_equal:  'setae' }
+
+
+def convert_set(cond, signed):
+    cond_map = signed_set_map if signed else unsigned_set_map
+    return cond_map[cond]
+
+
 
 
 # get_temp_reg()-- Given a type node, return the designated temporary
@@ -88,17 +134,116 @@ def replace_insn(insn, repl):
 
 
 
+s1 = [ 'cmp @2, @1' ]
+s2 = [ 'cmp @1, @2' ]
+s3 = [ 'mov @1, @t', 'cmp @t, @2' ]
 
-s1  = [ 'op $2, $1' ]
-s2  = [ 'op $1, $2' ]
-s3  = [ 'mov $2, $1', 'op $3, $1' ]
-s4  = [ 'op $3, $1' ]
-s5  = [ 'mov $3, $1', 'op $2, $1' ]
-s6  = [ 'op $3, $2', 'mov $2, $1' ]
-s7  = [ 'op $2, $3', 'mov $3, $1' ]
-s8  = [ 'mov $2, $t', 'op $3, $t', 'mov $t, $1' ]
-s9  = [ 'mov $3, $t', 'op $t, $1' ]
-s10 = [ 'mov $2, $t', 'op $t, $1' ]
+cmp_map = { 1: s2,  2: s2,  3: s1,  4: s2,
+            5: s3,  6: s2,  7: s1,  8: s1, }
+    
+del s1, s2, s3
+
+
+# classify_cmp()-- Classify a comparison expression.  Because
+# constants can only be on one side of the compare, we sometimes have
+# to reverse the caller's sense of comparison.
+
+def classify_cmp(y, z):
+    temp_type = y.type
+
+    if not isinstance(y, constant):
+        y = y.register
+        pass
+
+    if not isinstance(z, constant):
+        z = z.register
+        pass
+
+    if isinstance(y, integer_subreg):
+        if isinstance(z, integer_subreg):
+            case = 1      #  r1 cmp r2
+            reverse = False
+
+        elif isinstance(z, memory):
+            case = 2      #  r1 cmp m1
+            reverse = False
+
+        elif isinstance(z, constant):
+            case = 3      #  r1 cmp c1
+            reverse = False
+
+        else:
+            raise RuntimeError, 'classify_cmp()-- Bad case 1'
+
+        pass
+
+    elif isinstance(y, memory):
+        if isinstance(z, integer_subreg):
+            case = 4      #  m1 cmp r1
+            reverse = False
+
+        elif isinstance(z, memory):
+            case = 5      #  m1 cmp m2
+            reverse = False
+
+        elif isinstance(z, constant):
+            case = 6      #  m1 cmp c1
+            reverse = False
+
+        else:
+            raise RuntimeError, 'classify_cmp()-- Bad case 2'
+
+        pass
+
+    elif isinstance(y, constant):
+        if isinstance(z, integer_subreg):
+            case = 7      # c1 cmp r1
+            reverse = True
+
+        elif isinstance(z, memory):
+            case = 8      # c1 cmp m1
+            reverse = True
+
+        else:
+            raise RuntimeError, 'classify_cmp()-- Base case 3'
+
+        pass
+
+    else:
+        raise RuntimeError, 'classify_cmp()-- Base case 4'
+
+    print 'case =', case
+
+    repl = { '@t': get_temp_reg(temp_type), '@1': y, '@2': z }
+
+    insn_list = [ replace_insn(i, repl) for i in cmp_map[case] ]
+    return reverse, insn_list
+
+
+
+s1 = [ 'sub @1, @3' ]
+s2 = [ 'sub @1, @3', 'neg @1' ]
+s3 = [ 'mov @2, @1', 'sub @1, @3' ]
+
+subtract_seq = {
+    1: s1,
+    2: s2,
+    3: s3 }
+
+
+###
+
+
+s1  = [ 'op @2, @1' ]
+s2  = [ 'op @1, @2' ]
+s3  = [ 'mov @2, @1', 'op @3, @1' ]
+s4  = [ 'op @3, @1' ]
+s5  = [ 'mov @3, @1', 'op @2, @1' ]
+s6  = [ 'op @3, @2', 'mov @2, @1' ]
+s7  = [ 'op @2, @3', 'mov @3, @1' ]
+s8  = [ 'mov @2, @t', 'op @3, @t', 'mov @t, @1' ]
+s9  = [ 'mov @3, @t', 'op @t, @1' ]
+s10 = [ 'mov @2, @t', 'op @t, @1' ]
 
 commutative_seq = {
     1: s1,  2: s2,   3: s3,   4: s1,   5: s2,   6: s4,   7: s3,
@@ -109,21 +254,6 @@ commutative_seq = {
     27: s10,  28: s8,  29: s7,  30: s8,  31: s1,  32: s8, }
 
 del s1, s2, s3, s4, s5, s6, s7, s8, s9, s10
-
-
-s1 = [ 'sub $1, $3' ]
-s2 = [ 'sub $1, $3', 'neg $1' ]
-s3 = [ 'mov $2, $1', 'sub $1, $3' ]
-
-
-
-subtract_seq = {
-    1: s1,
-    2: s2,
-    3: s3,
-
-    }
-
 
 
 
@@ -427,6 +557,32 @@ def classify_unary(st):
     return case
 
 
+# predicate_insn()-- Treat the expression as a predicate.  We return
+# the predicate and a list of instructions.  If the expression is a
+# comparison, we generate the instructions for the compare and return
+# the predicate (which might be different than the original
+# expression).  If the predicate is not a comparison, then the
+# comparsion is with zero.
+
+def predicate_insn(st):
+    if isinstance(st, expr_compare):
+        reverse, insn_list = classify_cmp(st.a, st.b)
+        signed = signed_type(st.a.type) or signed_type(st.b.type)
+        cond = st
+
+    else:
+        reverse, insn_list = classify_cmp(st, constant('0', st.type))
+        cond = expr_not_equal
+        signed = True
+        pass
+
+    if reverse:
+        cond = opposite_cond[cond]
+        pass
+
+    return cond, signed, insn_list
+
+
 # The real object-oriented method would be to have methods on ir_nodes
 # that generate instructions.  Going that way ends up with all the
 # code generation in ir_nodes, which means a huge file.
@@ -435,9 +591,13 @@ def classify_unary(st):
 # insn_assign()-- Generate assembler from an assignment statement.
 
 def insn_assign(st):
-    if isinstance(st.value, expr_binary):
-        repl = { '$1': st.var, '$2': st.value.a, '$3': st.value.b,
-                 '$t': get_temp_reg(st.value.type),
+
+    if isinstance(st.value, expr_compare):
+        pass
+
+    elif isinstance(st.value, expr_binary):
+        repl = { '@1': st.var, '@2': st.value.a, '@3': st.value.b,
+                 '@t': get_temp_reg(st.value.type),
                  'op': st.value.arith_op }
 
         case = classify_binary(st)
@@ -472,8 +632,8 @@ def insn_jump(st):
         op = 'jmp'
 
     else:
-        result = self.cond.get_insn(None)
-        op = st.cond.jump_opcode()
+        cond, signed, result = predicate_insn(st.cond)
+        op = convert_jump(cond.__class__, signed)
         pass
 
     result.append('%s %s' % (op, st.label.name))
@@ -487,15 +647,22 @@ def generate_assembler(graph):
     while st is not None:
         if isinstance(st, expr_assign):
             insns = insn_assign(st)
+            indent = True
 
         elif isinstance(st, jump):
             insns = insn_jump(st)
+            indent = True
 
         elif isinstance(st, label):
             insns = [ st.name + ':' ]
+            indent = False
 
         else:
             raise RuntimeError, 'get_omsm'
+
+        if indent:
+            insns = [ '   ' + insn for insn in insns ]
+            pass
 
         insn_list.extend(insns)
         st = st.next
