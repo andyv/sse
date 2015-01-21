@@ -907,6 +907,7 @@ class expr_uplus(expr_unary):
 
 class expr_uminus(expr_unary):
     op = '-'
+    arith_op = 'neg'
 
     def simplify(self):
         self.arg = self.arg.simplify()

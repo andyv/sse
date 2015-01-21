@@ -27,6 +27,7 @@ import string
 
 from ir_nodes import expr_assign, expr_binary, expr_unary, expr_compare, label
 from ir_nodes import jump, integer_subreg, memory, variable, opposite_cond
+from ir_nodes import expr_unary
 
 from ir_nodes import expr_equal, expr_not_equal, expr_less
 from ir_nodes import expr_less_equal, expr_greater, expr_greater_equal
@@ -84,13 +85,6 @@ unsigned_set_map = {
     expr_less_equal:     'setbe',
     expr_greater:        'seta',
     expr_greater_equal:  'setae' }
-
-
-def convert_set(cond, signed):
-    cond_map = signed_set_map if signed else unsigned_set_map
-    return cond_map[cond]
-
-
 
 
 # get_temp_reg()-- Given a type node, return the designated temporary
@@ -492,6 +486,19 @@ def classify_binary(st):
     return case
 
 
+
+s1 = [ 'op $2' ]
+s2 = [ 'mov $2, $1', 'op $1' ]
+s3 = [ 'op $2', 'mov $2, $1' ]
+s4 = [ 'mov $2, $t', 'op $t', 'mov $t, $1' ]
+
+unary_seq = {
+    1: s1,  2: s2,  3: s2,  4: s3,
+    5: s4,  6: s1,  7: s4 }
+
+del s1, s2, s3, s4
+
+
 # classify_unary()-- Classify a unary expression.  Way, way fewer
 # cases than classify_binary().  We have x = op y
 
@@ -500,14 +507,22 @@ def classify_unary(st):
     x = st.var
     y = st.value.arg
 
+    if not isinstance(x, constant):
+        x = x.register
+        pass
+
+    if not isinstance(y, constant):
+        y = y.register
+        pass
+
     y_dead = True
 
     for n in st.successor():
         y_dead = y_dead and y in n.live
         pass
 
-    if isinstance(integer_subreg, x):
-        if isinstance(integer_subreg, y):
+    if isinstance(x, integer_subreg):
+        if isinstance(y, integer_subreg):
             if x is y:
                 case = 1  # r1 = op r1
 
@@ -517,7 +532,7 @@ def classify_unary(st):
 
             pass
 
-        elif isinstance(memory_subreg, y):
+        elif isinstance(y, memory_subreg):
             case = 3      # r1 = op m1
 
         else:
@@ -525,8 +540,8 @@ def classify_unary(st):
 
         pass
 
-    elif isinstance(memory, x):
-        if isinstance(integer_subreg, y):
+    elif isinstance(x, memory):
+        if isinstance(y, integer_subreg):
             if y_dead:
                 case = 4  # m1 = op r1,  r1 dead
 
@@ -536,7 +551,7 @@ def classify_unary(st):
 
             pass
 
-        elif isinstance(memory_subreg, y):
+        elif isinstance(y, memory_subreg):
             if x is y:
                 case = 6  # m1 = op m1
 
@@ -554,7 +569,16 @@ def classify_unary(st):
     else:
         raise RuntimeError, 'classify_unary(): Bad case 3'
 
-    return case
+    return case, x, y
+
+
+def insn_unary(st):
+    case, x, y = classify_unary(st)
+
+    repl = { '@t': get_temp_reg(st.var.type), 'op': st.value.arith_op,
+             '$1': str(x), '$2': str(y) }
+
+    return [ replace_insn(i, repl) for i in unary_seq[case] ]
 
 
 # predicate_insn()-- Treat the expression as a predicate.  We return
@@ -593,7 +617,18 @@ def predicate_insn(st):
 def insn_assign(st):
 
     if isinstance(st.value, expr_compare):
-        pass
+        reverse, r = classify_cmp(st.value.a, st.value.b)
+
+        signed = signed_type(st.value.a.type) and signed_type(st.value.b.type)
+        cond_map = signed_set_map if signed else unsigned_set_map
+
+        cond = st.value.__class__
+        if reverse:
+            cond = opposite_cond[cond]
+            pass
+
+        insn = '%s %s' % (cond_map[cond], st.var.register)
+        r.append(insn)
 
     elif isinstance(st.value, expr_binary):
         repl = { '@1': st.var, '@2': st.value.a, '@3': st.value.b,
@@ -604,7 +639,7 @@ def insn_assign(st):
         r = [ replace_insn(i, repl) for i in commutative_seq[case] ]
             
     elif isinstance(st.value, expr_unary):
-        pass
+        r = insn_unary(st)
 
     elif isinstance(st.value, constant):
         r = [ 'mov $%s, %s' % ( st.value.value, st.var.register ) ]

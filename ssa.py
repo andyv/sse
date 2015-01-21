@@ -27,7 +27,7 @@
 
 from ir_nodes import jump, label, ir_node, expr_assign, expr_binary
 from ir_nodes import expr, phi, phi_arg, constant, variable, expr_ternary
-from ir_nodes import expr_compare, show_flowgraph
+from ir_nodes import expr_compare, expr_unary, expr_intrinsic, show_flowgraph
 
 ### Subroutines for converting the flow graph to SSA form.
 
