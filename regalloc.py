@@ -26,7 +26,7 @@
 
 # Register allocation
 
-from ir_nodes import expr, expr_swap, expr_assign, label, jump, show_flowgraph
+from ir_nodes import expr, swap, expr_assign, label, jump, show_flowgraph
 from ir_nodes import get_temp_label, invert_condition, integer_register
 
 from ir_nodes import reg_a, reg_b, reg_c, reg_d, reg_src, reg_dst, reg_base
@@ -544,7 +544,7 @@ def merge_instructions(plist):
         if phys_from[n] is not phys_to[n]:
             k = phys_from.index(phys_to[n])
 
-            e = expr_swap(v_from[k], v_to[n])
+            e = swap(v_from[k], v_to[n])
             result.append(e)
 
             t = v_to[n]

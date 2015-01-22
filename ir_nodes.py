@@ -309,10 +309,10 @@ class expr_assign(expr):
     pass
 
 
-# expr_swaps always have variables for arguments, they are produced
+# swaps always have variables for arguments, they are produced
 # deep in the phi-merging code.
 
-class expr_swap(expr):
+class swap(expr):
     def __init__(self, a, b):
         self.a = a
         self.b = b
@@ -324,17 +324,6 @@ class expr_swap(expr):
         sys.stdout.write(', ')
         self.b.show()
         return
-
-    def get_insn(self):
-        r1 = self.a.register
-        r2 = self.b.register
-
-        if (not r1.memory) or (not r2.memory):
-            return [ insn_exchange(r1, r2) ]
-
-        temp = get_temp_reg(self.r1.type)
-        return [ insn_move(r1, temp), insn_exchange(temp, r2),
-                 insn_move(r2, temp) ]
 
     pass
 
@@ -727,9 +716,6 @@ class expr_bitwise_or(expr_binary):
             return constant(self.a.value | self.b.value, self.a.type)
 
         return self
-
-    def get_insn(self, result):
-        return self.get_commutative_binary_insn('or', result)
 
     pass
 

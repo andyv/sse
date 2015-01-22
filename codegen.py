@@ -27,7 +27,7 @@ import string
 
 from ir_nodes import expr_assign, expr_binary, expr_unary, expr_compare, label
 from ir_nodes import jump, integer_subreg, memory, variable, opposite_cond
-from ir_nodes import expr_unary
+from ir_nodes import expr_unary, swap
 
 from ir_nodes import expr_equal, expr_not_equal, expr_less
 from ir_nodes import expr_less_equal, expr_greater, expr_greater_equal
@@ -205,8 +205,6 @@ def classify_cmp(y, z):
 
     else:
         raise RuntimeError, 'classify_cmp()-- Base case 4'
-
-    print 'case =', case
 
     repl = { '@t': get_temp_reg(temp_type), '@1': y, '@2': z }
 
@@ -661,6 +659,21 @@ def insn_assign(st):
     return r
 
 
+def insn_swap(st):
+    r1 = self.a.register
+    r2 = self.b.register
+
+    if (not isinstance(r1, memory)) or (not isinstance(r2, memory)):
+        return [ 'xchg %s, %s' % (r1, r2) ]
+
+# memory/memory exchange
+
+    temp = get_temp_reg(self.r1.type)
+
+    return [ 'mov %s, %s' % (r1, temp), 'xchg %s, %s' % (temp, r2),
+             'mov %s, %s' % (temp, r2) ]
+
+
 def insn_jump(st):
     if st.cond is None:
         result = []
@@ -680,23 +693,26 @@ def generate_assembler(graph):
     st = graph
 
     while st is not None:
+        indent = True
+
         if isinstance(st, expr_assign):
             insns = insn_assign(st)
-            indent = True
 
         elif isinstance(st, jump):
             insns = insn_jump(st)
-            indent = True
 
         elif isinstance(st, label):
             insns = [ st.name + ':' ]
             indent = False
 
+        elif isinstance(st, swap):
+            insns = insn_swap(st)
+
         else:
-            raise RuntimeError, 'get_omsm'
+            raise RuntimeError, 'generate_assembler: Bad instruction'
 
         if indent:
-            insns = [ '   ' + insn for insn in insns ]
+            insns = [ '\t' + insn for insn in insns ]
             pass
 
         insn_list.extend(insns)
