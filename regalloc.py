@@ -34,6 +34,8 @@ from ir_nodes import reg_8, reg_9, reg_10, reg_11, reg_12, reg_13, reg_14
 from ir_nodes import reg_15, xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
 from ir_nodes import xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15
 
+from ir_nodes import memory, integer_subreg
+
 from kw import type_int8, type_int4, type_int2, type_int1, type_uint8
 from kw import type_uint4, type_uint2, type_uint1, type_float4, type_float8
 from kw import type_float8_2,type_float4_4, type_int8_2, type_int4_4
@@ -344,8 +346,8 @@ def pick_register(v):
         raise RuntimeError, 'pick_register(): Unknown type'
 
     for w in v.interference:
-        if v.present and (not isinstance(v.register, memory)):
-            r = v.register
+        if w.present and (not isinstance(w.register, memory)):
+            r = w.register
 
             if isinstance(r, integer_subreg):
                 r = r.parent
@@ -372,7 +374,7 @@ def pick_register(v):
 
 def color_graph(graph):
     peo = var_dominance(graph)
-    print [ v.name for v in peo ]
+    print 'Elimination order', [ v.name for v in peo ]
 
     for v in peo:
         v.present = False
@@ -386,6 +388,7 @@ def color_graph(graph):
 
     for v in peo:
         v.register = pick_register(v)
+        print 'reg', v.name, '->', v.register 
         v.present = True
         pass
 
@@ -566,11 +569,11 @@ def merge_instructions(plist):
 
 def allocate(graph):
     liveness(graph)
-    interference_graph(graph)
+    interference_graph(graph) 
+    show_flowgraph(graph)
+    show_interference(graph)
     color_graph(graph)
     phi_merge(graph)
-
-#    show_flowgraph(graph)
 
     return
 

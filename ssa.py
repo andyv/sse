@@ -346,8 +346,6 @@ class find_dominators:
         i = 2
         while i <= self.n:
             w = self.vertex[i]
-            print 'i =', i, w, ; w.show() ; print
-
             if w.dom is not self.vertex[w.semi]:
                 w.dom = w.dom.dom
                 pass

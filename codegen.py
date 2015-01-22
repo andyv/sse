@@ -226,8 +226,8 @@ subtract_seq = {
 ###
 
 
-s1  = [ 'op @2, @1' ]
-s2  = [ 'op @1, @2' ]
+s1  = [ 'op @3, @1' ]
+s2  = [ 'op @2, @1' ]
 s3  = [ 'mov @2, @1', 'op @3, @1' ]
 s4  = [ 'op @3, @1' ]
 s5  = [ 'mov @3, @1', 'op @2, @1' ]
@@ -482,7 +482,6 @@ def classify_binary(st):
         raise RuntimeError, 'classify_binary(): Base case 9'
 
     return case
-
 
 
 s1 = [ 'op $2' ]
