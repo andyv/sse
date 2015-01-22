@@ -314,7 +314,8 @@ class find_dominators:
 
         self.vertex = {}
         self.n = 0
-        self.depth_search()
+        self.graph.parent = None
+        self.depth_first_search(self.graph)
 
         i = self.n
 
@@ -345,6 +346,8 @@ class find_dominators:
         i = 2
         while i <= self.n:
             w = self.vertex[i]
+            print 'i =', i, w, ; w.show() ; print
+
             if w.dom is not self.vertex[w.semi]:
                 w.dom = w.dom.dom
                 pass
@@ -358,33 +361,22 @@ class find_dominators:
         return
 
 
-# depth_search()-- Depth search of the flow graph.  Python's default
-# recursion limit is 1000 frames, which is not very good long term.
-# We instead opt for maintaining a queue of unexplored nodes.  Doing
-# it this way doesn't result in a deep stack like a recursive
-# depth_search() would.
+# depth_first_search()-- Depth first search of the flow graph.
+# Python's limit of 1000 frames limits statement chains in program
+# units to this much as well.
 
-    def depth_search(self):
-        queue = []
-        queue.append(self.graph)
-        self.graph.parent = None
+    def depth_first_search(self, v):
+        self.n += 1
+        self.vertex[self.n] = v
+        v.semi = self.n
 
-        while len(queue) > 0:
-            v = queue.pop(0)
-            self.n += 1
-
-            self.vertex[self.n] = v
-            v.semi = self.n
-
-            for w in v.successor():
-                if w.semi == 0:
-                    w.parent = v
-                    queue.append(w)
-                    pass
-
-                w.pred.append(v)
+        for w in v.successor():
+            if w.semi == 0:
+                w.parent = v
+                self.depth_first_search(w)
                 pass
 
+            w.pred.append(v)
             pass
 
         return
@@ -678,7 +670,6 @@ def ssa_conversion(proc):
     find_dominators(st)
     dominance_tree(st)
     dominance_frontier(st)
-
 
     variables = place_phi(st)
     for v in proc.args.values():
