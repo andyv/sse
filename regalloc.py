@@ -229,6 +229,45 @@ def liveness_label(st, info, stack):
     return
 
 
+# last_use()-- For each node, see which of the used variables are
+# being used for the last time.  We detect this by getting the
+# used-variable list, and seeing if they are live in successor nodes.
+
+def last_use(graph):
+
+    st = graph
+    while st is not None:
+        used = {}
+
+        if isinstance(st, expr_assign):
+            st.value.used_vars(used)
+
+        elif isinstance(st, jump) and st.cond is not None:
+            st.cond.used_vars(used)
+            pass
+
+        last_used = []
+
+        for v in used.keys():
+            for n in st.successor():
+                if v in n.live:
+                    break
+
+                pass
+
+            else:
+                last_used.append(v)
+                pass
+
+            pass
+
+        st.last_used = last_used
+        st = st.next
+        pass
+
+    return
+
+
 # interference_graph()-- Given the program flow graph with liveness
 # information at each node, create an interference graph.  Variables
 # are the nodes, edges are pairs of variables that are simultaneously
@@ -299,7 +338,6 @@ def show_interference(graph):
     return
 
 
-
 # var_dominance()-- Create a list of variable dominance order.  This
 # means traversing the dominance tree, adding variable definitions in
 # post-order.  This forms a perfect elimination order for coloring,
@@ -346,6 +384,7 @@ def pick_register(v):
         raise RuntimeError, 'pick_register(): Unknown type'
 
     for w in v.interference:
+        print w.name
         if w.present and (not isinstance(w.register, memory)):
             r = w.register
 
@@ -374,7 +413,7 @@ def pick_register(v):
 
 def color_graph(graph):
     peo = var_dominance(graph)
-    print 'Elimination order', [ v.name for v in peo ]
+#    print 'Elimination order', [ v.name for v in peo ]
 
     for v in peo:
         v.present = False
@@ -388,7 +427,7 @@ def color_graph(graph):
 
     for v in peo:
         v.register = pick_register(v)
-        print 'reg', v.name, '->', v.register 
+#        print 'reg', v.name, '->', v.register 
         v.present = True
         pass
 
@@ -458,7 +497,7 @@ def merge_single_entry(st, entry, plist):
 
     print '-------'
     for a, b in plist:
-        print '%s (%d) -> %s (%d)' % (a.name, a.register, b.name, b.register)
+        print '%s (%s) -> %s (%s)' % (a.name, a.register, b.name, b.register)
         pass
 
     instructions = merge_instructions(plist)
@@ -514,8 +553,8 @@ def merge_single_entry(st, entry, plist):
 
 
 # merge_instructions()-- Take the plist, un-zip it into two vectors, a
-# from vector and a 'to' vector.  We look at the register entries but
-# generate instructions in terms of variables.
+# 'from' vector and a 'to' vector.  We look at the register entries
+# but generate instructions in terms of variables.
 
 def merge_instructions(plist):
     if len(plist) == 1:
@@ -547,15 +586,15 @@ def merge_instructions(plist):
         if phys_from[n] is not phys_to[n]:
             k = phys_from.index(phys_to[n])
 
-            e = swap(v_from[k], v_to[n])
+            e = swap(v_from[k], v_from[n])
             result.append(e)
 
-            t = v_to[n]
-            v_to[n] = v_from[k]
+            t = v_from[n]
+            v_from[n] = v_from[k]
             v_from[k] = t
 
-            t = phys_to[n]
-            phys_to[n] = phys_from[k]
+            t = phys_from[n]
+            phys_from[n] = phys_from[k]
             phys_from[k] = t
             pass
 
@@ -569,9 +608,10 @@ def merge_instructions(plist):
 
 def allocate(graph):
     liveness(graph)
+    last_use(graph)
     interference_graph(graph) 
     show_flowgraph(graph)
-    show_interference(graph)
+#    show_interference(graph)
     color_graph(graph)
     phi_merge(graph)
 

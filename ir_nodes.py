@@ -402,7 +402,7 @@ def init_btm():
     tlist = [ type_float4, type_uint8, type_int8, type_uint4, type_int4,
               type_uint2, type_int2, type_uint1, type_int1 ]
 
-    while len(tlist) > 1:
+    while len(tlist) > 0:
         t1 = tlist.pop(0)
         btm[t1, t1] = t1
 
@@ -421,7 +421,7 @@ def init_btm():
     tlist = [ type_uint8, type_int8, type_uint4, type_int4,
               type_uint2, type_int2, type_uint1, type_int1 ]
 
-    while len(tlist) > 1:
+    while len(tlist) > 0:
         t1 = tlist.pop(0)
         btm[t1, t1] = t1
         logical_type_map[t1, t1] = type_int4
@@ -461,6 +461,19 @@ class expr_binary(expr):
 
     def __init__(self, *args):
         self.a, self.b = args
+
+# Keep constants typeless.
+
+        if isinstance(self.a, constant) and isinstance(self.b, constant):
+            return
+
+        if isinstance(self.a, constant):
+            self.type = self.b.type
+            return
+
+        if isinstance(self.b, constant):
+            self.type = self.a.type
+            return
 
         ta = self.a.type.basic_type
         tb = self.b.type.basic_type
@@ -623,6 +636,7 @@ class expr_plus(expr_binary):
 
 class expr_minus(expr_binary):
     op = '-'
+    arith_op = 'sub'
 
     def simplify(self):
         self.a = self.a.simplify()
@@ -1051,7 +1065,7 @@ class integer_register(register):
         return
 
     def get_subreg(self, t):
-        return self.map[type_uint8] if t.level >= 0 else self.map[t.basic_type]
+        return self.map[type_uint8] if t.level > 0 else self.map[t.basic_type]
 
     pass
 
