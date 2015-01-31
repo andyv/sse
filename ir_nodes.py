@@ -802,50 +802,26 @@ class expr_compare(expr_binary):
 
 class expr_equal(expr_compare):
     op = '=='
-
-    def jump_opcode(self):
-        return 'je'
-    
     pass
 
 class expr_not_equal(expr_compare):
     op = '!='
-
-    def jump_opcode(self):
-        return 'jne'
-    
     pass
 
 class expr_less(expr_compare):
     op = '<'
-
-    def jump_opcode(self):
-        return 'jlt'
-
     pass
 
 class expr_less_equal(expr_compare):
     op = '<='
-
-    def jump_opcode(self):
-        return 'jle'
-
     pass
 
 class expr_greater(expr_compare):
     op = '>'
-
-    def jump_opcode(self):
-        return 'jgt'
-
     pass
 
 class expr_greater_equal(expr_compare):
     op = '>='
-
-    def jump_opcode(self):
-        return 'jge'
-
     pass
 
 
@@ -947,6 +923,19 @@ class expr_logical_not(expr_unary):
     pass
 
 
+class expr_bitwise_not(expr_unary):
+    op = '~'
+    arith_op = 'not'
+
+    def simplify(self):
+        self.arg = a = self.arg.simplify()
+        if isinstance(a, constant):
+            a.value = ~a.value
+            return self.arg
+
+        return self
+
+
 class expr_paren(expr_unary):
 
     def show(self):
@@ -960,7 +949,6 @@ class expr_paren(expr_unary):
         return self.arg.simplify()
 
     pass
-
 
 
 class expr_intrinsic(expr):

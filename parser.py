@@ -272,7 +272,8 @@ class parser:
         try:
             cons = {
                 tok_plus: expr_uplus,  tok_minus:       expr_uminus,
-                tok_star: expr_load,   tok_logical_not: expr_logical_not }[t]
+                tok_star: expr_load,   tok_logical_not: expr_logical_not,
+                tok_bit_not: expr_bitwise_not, }[t]
 
             e = cons(self.parse_expr_2())
 
@@ -413,7 +414,7 @@ class parser:
         a = self.parse_expr_9()
 
         while self.lexer.peek_token(tok_bit_or):
-            a = expr_bitwise_xor(a, self.parse_expr_9())
+            a = expr_bitwise_or(a, self.parse_expr_9())
             pass
 
         return a

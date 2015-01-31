@@ -267,7 +267,6 @@ def classify_cmp(y, z):
     return reverse, insn_list
 
 
-
 # classify_binary()-- Classify a binary assignment node.  This
 # classification determines what kind of assembler is generated.  The
 # expression is an SSA style triple
@@ -281,7 +280,6 @@ def classify_cmp(y, z):
 # somewhere in the caller.
 
 def classify_binary(st):
-
     x = st.var.register
 
     y = st.value.a
@@ -621,7 +619,7 @@ def insn_assign(st):
         cond_map = signed_set_map if signed else unsigned_set_map
 
         cond = st.value.__class__
-        if reverse:
+        if not reverse:
             cond = opposite_cond[cond]
             pass
 
@@ -921,14 +919,12 @@ def test_unary(operator):
 
 
 def code_test():
-
     from ir_nodes import expr_plus, expr_minus, expr_uminus
     test_binary(expr_minus, subtract_seq)
     test_binary(expr_plus, commutative_seq)
     test_cmp()
     test_unary(expr_uminus)
     
-
 
 
 
