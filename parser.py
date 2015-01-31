@@ -642,18 +642,14 @@ class parser:
         result = initial_list
         result.append(top_label)
 
-        i = 0
-        while i < len(cont_list):
-            if i < len(cont_list) - 1:
-                st = cont_list[i]
+        if len(cont_list) > 1:
+            result.extend(cont_list[:-1])
+            pass
 
-            else:
-                st = invert_condition(st)
-                st = jump(self.break_label, st)
-                pass
-
+        if len(cont_list) > 0:
+            st = invert_condition(cont_list[-1])
+            st = jump(self.break_label, st)
             result.append(st)
-            i = i + 1
             pass
 
         result.append(loop_body)
